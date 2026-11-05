@@ -7,12 +7,18 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node tests/operations.test.js",
+    "test:db": "bash scripts/test-db.sh",
+    "validate": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.99.0",
     "lucide-react": "^1.69.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,3 +1,5 @@
+> Documento histórico da versão Python/SQLite. Para a stack atual React + Supabase, consulte [README.md](README.md). Não use estas instruções para implantar o novo PDV.
+
 # Planeta Lanches
 
 Painel web responsivo para organizar o atendimento e a cozinha, com login individual e dois perfis. Versão inicial para desenvolvimento e validação com a equipe.
