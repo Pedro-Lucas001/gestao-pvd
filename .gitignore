@@ -27,3 +27,10 @@ dist-ssr
 .data/
 __pycache__/
 *.pyc
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/

@@ -1,46 +1,54 @@
-# Planeta Lanches · Gestão
+# Planeta Lanches · PDV + Supabase
 
-Painel web responsivo em React com a identidade preto, roxo e dourado da marca, cardápio da loja, pedidos e cozinha, conectado ao servidor Python/SQLite com login individual.
+React com visual **cinza-aço e laranja-fogo**, Supabase Auth/PostgreSQL/RLS e fundação do KDS com Realtime. Esta entrega contém a arquitetura, o esquema relacional e o código inicial do **Módulo 1 — frente de caixa**; não é uma implantação pronta de todos os módulos descritos.
 
-## Iniciar
+## Começar
 
-Requer Node.js 22.12+ (ou 20.19+) e Python 3.10+.
+Node.js 22.12+ (ou 20.19+):
 
-```bash
+```sh
 npm ci
-npm run build
-python3 server.py
+npm run dev
 ```
 
-O servidor atende na porta 3000 e serve o frontend compilado em `dist/`. No primeiro acesso, cadastre o administrador em ambiente privado antes de disponibilizar o sistema. Não existe senha padrão. Para desenvolver a interface, mantenha o servidor Python ativo e execute `npm run dev` em outro terminal: o Vite encaminha `/api` para a porta 3000. O navegador usa rotas relativas, inclusive no celular, e não um endereço localhost fixo.
+Sem variáveis Supabase, a aplicação abre uma **prévia visual**, com os 47 produtos reais do cardápio, imagens ilustrativas, filtros, carrinho e modificadores inline. Nenhum login, pedido ou pagamento real é simulado. Combos aparecem como categoria vazia até cadastro de combinações reais.
 
-Depois de mudar o frontend ou cardápio, execute `npm run build` novamente. A inicialização informa quando o frontend ainda não foi compilado; a interface anterior foi substituída pela aplicação React.
+Para operar: crie um projeto Supabase, siga [docs/deploy.md](docs/deploy.md), aplique as migrações e seed, crie as contas e configure os valores públicos de `.env.example` em `.env.local`. Com Supabase configurado, os acessos são individuais:
 
-## Cardápio e identidade visual
+- **Admin:** PDV, KDS e áreas de gestão protegidas; criação de perfis/ativação/PINs. As telas de estoque/relatórios são fundações documentadas, não módulos completos.
+- **Caixa:** somente PDV, turno próprio e próprios pedidos. E-mail/senha + PIN pessoal de 4 dígitos para destravar o terminal, com limite de tentativas e lease de 15 min no servidor.
+- **Cozinha:** somente KDS e tickets do seu setor, sem valores financeiros.
 
-Os 47 produtos em `src/data/menu.json` foram transcritos do cardápio fornecido pela loja: hambúrgueres, dogões, porções, pastéis, mini coxinhas, bebidas e adicionais. Valores são inteiros em centavos. As bebidas **Santa Joana 200 ml (R$ 2)** e **Antarctica 200 ml (R$ 3)** foram confirmadas pelo responsável. As quantidades de mini coxinhas são opções de porção, não unidades avulsas.
+O PostgreSQL calcula os totais e valida modificadores; não aceita o preço informado pelo navegador. Confirmação manual de **dinheiro** libera o pedido; **Pix e TEF ainda exigem provedor e homologação**, e os adaptadores falham fechados. Pedidos e tentativas usam idempotência para retry sem duplicação. Offline preserva o rascunho e bloqueia envios/pagamentos até reconectar.
 
-O cardápio tem filtros por categoria e busca por nome ou ingrediente. A criação de pedidos usa o mesmo catálogo, com quantidades e adicionais como itens separados. Nas observações, informe a qual lanche pertence cada adicional. Nesta versão, alterar o catálogo exige editar o JSON e recompilar; não há cadastro persistente de produtos pela interface.
+## Estrutura
 
-A imagem em `public/brand/planeta-art.png` é uma adaptação ilustrada gerada a partir da identidade enviada pela loja, para uso no painel. Não é o arquivo original da logo. As miniaturas das categorias são ícones ilustrativos; não são fotografias dos produtos. O símbolo compacto do planeta e o favicon acompanham as cores da marca.
-
-## Acessos e operação
-
-- **Administrador:** visão geral, cardápio, pedidos, cozinha, pagamentos manuais, equipe e estado das integrações.
-- **Funcionário:** cadastro e consulta de pedidos e acompanhamento da cozinha, sem acesso à gestão da equipe e sem confirmação de pagamentos.
-
-Pedidos ficam aguardando pagamento até a confirmação manual pelo administrador. Só então entram na cozinha e avançam por **Na fila → Em preparo → Pronto → Concluído**. A atualização ocorre a cada 15 segundos. O servidor valida permissões, sessões e proteção CSRF. Os dados ficam em `.data/planeta.db`, ignorado pelo Git. Mais detalhes sobre sessões, backups e configuração em [README.gestao.md](README.gestao.md).
-
-O frontend React agora utiliza as rotas reais de autenticação, pedidos e equipe do servidor Python. As antigas telas de caixa e cadastro de produtos dependiam de rotas que não existiam nesse servidor; não são apresentadas como funcionalidades operacionais. Recebimentos confirmados aparecem na visão geral, sem simular um controle completo de caixa.
-
-**Ainda não integrados:** Pix automático, recebimento de mensagens WhatsApp e impressão automática. O canal WhatsApp identifica pedidos digitados manualmente pela equipe. Cancelar um pedido não realiza estorno.
-
-## Validar
-
-```bash
-npm run lint
-npm run build
-python3 -m unittest discover -s tests -v
+```text
+src/auth/              sessão, PIN e proteção de rotas por cargo
+src/pdv/               catálogo, carrinho, personalização, turno e pagamentos
+src/kds/               tickets por setor, cores por tempo e ressincronização
+src/components/        Error Boundaries e detecção de rede
+src/lib/               cliente Supabase, operações puras e monitoramento
+supabase/migrations/   tabelas, RLS, grants e RPCs transacionais
+supabase/functions/    contratos de Pix/TEF e webhook fail-closed
+supabase/seed.sql      47 produtos; sem estoque/custos/receitas inventados
+supabase/tests/        testes de autorização e transações em PostgreSQL real
+docs/                  arquitetura, implantação e consultas de analytics
 ```
 
-Os testes do servidor usam banco temporário e verificam os perfis, a revogação de sessões, CSRF e o fluxo de pagamento/preparo. Os testes do catálogo verificam os valores e quantidades do cardápio e as bebidas confirmadas. Consulte [tests/README.md](tests/README.md) para a validação opcional no navegador.
+- [Arquitetura e modelo relacional](docs/architecture.md), com limites, RLS, idempotência, PIN, estoque, Realtime, autoatendimento e WhatsApp.
+- [Implantação e variáveis staging/production](docs/deploy.md), Vercel, pooler, backups e monitoramento.
+- [Consultas de analytics para admin](docs/analytics.sql): picos de horário, margem por ficha e gargalos.
+- [Testes e evidências](tests/README.md).
+
+## Validar e compilar
+
+```sh
+npm run validate
+npm run test:db
+npm run build
+```
+
+`test:db` exige Docker local e usa PostgreSQL descartável sem portas publicadas. Não usa credenciais nem banco da loja. Não substitui homologação em Supabase hospedado. O frontend pode ser publicado na Vercel com a configuração versionada, mas nenhum serviço foi publicado automaticamente.
+
+A versão anterior Python/SQLite e seus testes permanecem no histórico/arquivos para consulta; **não fazem parte do backend ativo desta versão**. Não execute `server.py` para usar o PDV Supabase. Os usuários, pedidos e saldos antigos não foram migrados nem apagados. A migração de dados exige um procedimento separado com conferência de saldos e contas. O catálogo estático anterior foi mantido para a prévia; no modo real, o catálogo vem do PostgreSQL, com o seed do cardápio e as bebidas 200 ml confirmadas pela loja.
