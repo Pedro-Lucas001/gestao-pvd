@@ -1,3 +1,9 @@
+## Painel de gestão do Planeta Lanches
+
+O painel com perfis de administrador e funcionário está documentado em [README.gestao.md](README.gestao.md). Execute-o com `python3 server.py`; ele serve sua própria interface em `public/`. O frontend React abaixo foi preservado e permanece independente; suas rotas de API ainda não estão integradas a esse servidor.
+
+---
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
