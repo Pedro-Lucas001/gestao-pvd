@@ -30,6 +30,7 @@ import {
 import { useConnection } from "../components/useConnection";
 import { reportError } from "../lib/monitoring";
 import ErrorBoundary from "../components/ErrorBoundary";
+import CashDrawer from "./CashDrawer";
 const categories = [
   ["all", "Todos"],
   ["hamburgueres", "Hambúrgueres"],
@@ -88,6 +89,7 @@ export default function PDV({ preview = false }) {
     [error, setError] = useState(""),
     [pin, setPin] = useState(""),
     [closing, setClosing] = useState(false);
+  const [closingReason, setClosingReason] = useState("");
   const [paymentIntent, setPaymentIntent] = useState(null);
   const [pendingOrders, setPendingOrders] = useState(null);
   const userId = preview ? "preview" : profile.id;
@@ -392,7 +394,10 @@ export default function PDV({ preview = false }) {
     setBusy(true);
     setError("");
     try {
-      await rpc("cancel_unpaid_order", { p_order: draft.order.id });
+      await rpc("cancel_unpaid_order", {
+        p_order: draft.order.id,
+        p_reason: prompt("Justificativa do cancelamento:") || "",
+      });
       setDraft((prev) => ({
         ...prev,
         order: { ...prev.order, status: "cancelled" },
@@ -413,6 +418,7 @@ export default function PDV({ preview = false }) {
         await rpc("close_shift", {
           p_shift: shift.id,
           p_counted_cents: cents(shiftValue),
+          p_reason: closingReason,
         });
         setClosing(false);
       } else await rpc("open_shift", { p_opening_cents: cents(shiftValue) });
@@ -539,6 +545,7 @@ export default function PDV({ preview = false }) {
           )}
         </div>
       </div>
+      {!preview && shift && <CashDrawer shiftId={shift.id} />}
       {closing && (
         <form className="close-shift" onSubmit={shiftAction}>
           <label>
@@ -548,6 +555,16 @@ export default function PDV({ preview = false }) {
               required
               value={shiftValue}
               onChange={(e) => setShiftValue(e.target.value)}
+            />
+          </label>
+          <label>
+            Justificativa do fechamento
+            <input
+              required
+              minLength={5}
+              maxLength={500}
+              value={closingReason}
+              onChange={(e) => setClosingReason(e.target.value)}
             />
           </label>
           <button
@@ -902,18 +919,17 @@ export default function PDV({ preview = false }) {
                 </div>
                 {method !== "cash" && (
                   <p className="payment-disclaimer">
-                    Pix dinâmico e TEF exigem provedor contratado. Não
-                    conectados nesta versão.
+                    Pix Nubank de conta física: confirmação manual do
+                    administrador. TEF exige serviço homologado.
                   </p>
                 )}
                 {paymentIntent?.pix && (
                   <div className="pix-code">
                     <QRCodeSVG value={paymentIntent.pix.copyPaste} size={150} />
                     <p>
-                      Válido até{" "}
-                      {new Date(paymentIntent.pix.expiresAt).toLocaleTimeString(
-                        "pt-BR",
-                      )}
+                      {paymentIntent.pix.expiresAt
+                        ? `Válido até ${new Date(paymentIntent.pix.expiresAt).toLocaleTimeString("pt-BR")}`
+                        : "QR Pix estático, sem expiração automática. Aguarde a conferência do crédito pelo administrador."}
                     </p>
                     <button
                       className="secondary"
@@ -940,7 +956,7 @@ export default function PDV({ preview = false }) {
                       : method === "cash"
                         ? "Confirmar recebimento em dinheiro"
                         : method === "pix"
-                          ? "Gerar Pix dinâmico"
+                          ? "Gerar Pix com valor do pedido"
                           : "Iniciar TEF"}
                   <ArrowRight size={17} />
                 </button>

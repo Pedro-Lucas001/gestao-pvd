@@ -37,3 +37,34 @@ verify_jwt = true
 
 [functions.provider-webhook]
 verify_jwt = false
+
+[functions.checkout-payment]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.integration-worker]
+verify_jwt = false
+
+[functions.staff-admin]
+verify_jwt = true
+
+[functions.whatsapp-send]
+verify_jwt = true
+
+[functions.integration-status]
+verify_jwt = true
+
+# Endpoints alternativos: exigem exclusivamente o contrato SQL em português de sql_editor/.
+[functions.eco-whatsapp-webhook]
+verify_jwt = false
+
+[functions.eco-gateway]
+verify_jwt = false
+
+[functions.eco-worker]
+verify_jwt = false
+
+[functions.eco-lgpd]
+verify_jwt = false

@@ -15,8 +15,9 @@ jobs:
       - run: npm ci
       - run: npm run validate
       - run: npm run test:db
+      - run: bash scripts/test-sql-editor.sh
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno check supabase/functions/payment-intent/index.ts supabase/functions/provider-webhook/index.ts
-      - run: deno test supabase/functions/_shared/http_test.ts
+      - run: deno check supabase/functions/*/index.ts
+      - run: deno test supabase/functions/_shared/*_test.ts

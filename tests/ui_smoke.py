@@ -11,6 +11,7 @@ import socket
 import subprocess
 import tempfile
 import time
+from datetime import datetime,timezone,timedelta
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright, expect
 
@@ -66,7 +67,26 @@ def mock_api(route):
     elif path=='/rest/v1/shifts':
         data=None
     elif path=='/rest/v1/rpc/unlock_terminal':
-        data={'ok':True,'expires_at':'2099-01-01T00:00:00Z'}
+        data={'ok':True,'expires_at':(datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()}
+    elif path=='/rest/v1/rpc/heartbeat_terminal':
+        data={'ok':True,'expires_at':(datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()}
+    elif path=='/rest/v1/rpc/lock_terminal':
+        data=None
+    elif path=='/rest/v1/ingredients':
+        data=[]
+    elif path=='/rest/v1/recipe_items':
+        data=[]
+    elif path=='/rest/v1/recipe_modifier_rules':
+        data=[]
+    elif path=='/rest/v1/rpc/checkout_menu':
+        data={'label':'Delivery de teste','channel':'delivery','products':CATALOG}
+    elif path=='/rest/v1/rpc/checkout_order':
+        mock_api.public_request=body
+        data={'id':'public-fixture','number':99,'total_cents':700,'status':'pending_payment'}
+    elif path=='/rest/v1/rpc/checkout_status':
+        data={'id':'public-fixture','number':99,'total_cents':700,'status':'pending_payment','fulfillment_state':'waiting','pix':None}
+    elif path=='/functions/v1/checkout-payment':
+        status=503;data={'error':'Pix ainda não configurado pela loja.'}
     elif path=='/rest/v1/rpc/open_shift':
         mock_api.shift=True
         data='shift-fixture'
@@ -125,14 +145,15 @@ if __name__=='__main__':
             for role in ['cashier','kitchen','admin']:
                 context=browser.new_context(viewport={'width':1440,'height':1080})
                 context.route('http://127.0.0.1:54399/**',mock_api)
-                page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
+                page=context.new_page();page.add_init_script("try{localStorage.setItem('planeta:registered-terminal:v1','"+'f'*64+"')}catch{}");page.clock.install();page.on('pageerror',lambda e:errors.append(str(e)))
                 navigate(page,app_port)
                 page.get_by_label('E-mail',exact=True).fill(role+'@fixture.test')
                 page.get_by_label('Senha',exact=True).fill('test-password-only')
                 page.get_by_role('button',name='Entrar no meu espaço').click()
-                if role=='cashier':
+                if role in ['cashier','kitchen']:
                     page.get_by_label('PIN de 4 dígitos').fill('1234')
                     page.get_by_role('button',name='Destravar terminal').click()
+                if role=='cashier':
                     page.get_by_role('button',name='Abrir meu caixa').click()
                     expect(page.locator('.product-card')).to_have_count(47)
                     page.get_by_role('button',name='Adicionar X-Tudo',exact=True).click()
@@ -146,6 +167,13 @@ if __name__=='__main__':
                     assert len(mock_api.requests)==2 and mock_api.requests[0]==mock_api.requests[1], 'Retry changed body/key'
                     page.get_by_role('button',name='Confirmar recebimento em dinheiro').click()
                     expect(page.get_by_role('heading',name='Pagamento confirmado.')).to_be_visible()
+                    page.clock.fast_forward(600001)
+                    expect(page.get_by_label('Tela bloqueada')).to_be_visible()
+                    expect(page.get_by_label('Nome do cliente')).to_have_count(0)
+                    page.screenshot(path='/tmp/planeta-idle-lock.png',full_page=False)
+                    page.get_by_label('PIN de 4 dígitos').fill('1234')
+                    page.get_by_role('button',name='Destravar terminal').click()
+                    expect(page.get_by_role('heading',name='Pagamento confirmado.')).to_be_visible()
                 if role in ['cashier','kitchen']:
                     for path in ['/dashboard','/estoque','/relatorios','/equipe']:
                         page.goto(f'http://127.0.0.1:{app_port}'+path)
@@ -153,11 +181,34 @@ if __name__=='__main__':
                         assert '/acesso-negado' in page.url
                 else:
                     page.goto(f'http://127.0.0.1:{app_port}/estoque')
-                    expect(page.get_by_role('heading',name='Estoque e fichas técnicas')).to_be_visible()
+                    expect(page.get_by_role('heading',name='Cada insumo sob controle.')).to_be_visible()
+                    page.clock.fast_forward(600001)
+                    expect(page.get_by_label('Tela bloqueada')).to_be_visible()
+                    page.reload()
+                    expect(page.get_by_label('Tela bloqueada')).to_be_visible()
+                    page.get_by_label('PIN de 4 dígitos').fill('1234')
+                    page.get_by_role('button',name='Destravar terminal').click()
+                    expect(page.get_by_role('heading',name='Cada insumo sob controle.')).to_be_visible()
                 context.close()
+            public=browser.new_context()
+            public.route('http://127.0.0.1:54399/**',mock_api)
+            page=public.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
+            page.goto(f'http://127.0.0.1:{app_port}/pedido?token='+('a'*64))
+            page.get_by_role('button',name='Adicionar Simples',exact=True).click()
+            page.get_by_label('Nome',exact=True).fill('Cliente de teste')
+            page.get_by_label('Telefone com DDD',exact=True).fill('5581999999999')
+            page.get_by_label('Endereço completo para entrega',exact=True).fill('Endereço de teste, número 10')
+            page.get_by_role('button',name='Enviar pedido e seguir para pagamento').click()
+            expect(page.get_by_role('heading',name='Aguardando pagamento',exact=True)).to_be_visible()
+            assert mock_api.public_request['p_contact']['whatsapp_consent'] is False
+            assert 'price_cents' not in mock_api.public_request['p_items'][0]
+            page.get_by_role('button',name='Gerar Pix com valor exato').click()
+            expect(page.get_by_text('Pix ainda não configurado pela loja.',exact=True)).to_be_visible()
+            expect(page.get_by_role('heading',name='Aguardando pagamento',exact=True)).to_be_visible()
+            public.close()
             assert not errors,errors
             browser.close()
-            print('UI OK: prévia, 47 produtos, modificadores inline, celular, offline, mesmo body/key no retry, pagamento dinheiro e rotas por cargo. Auth/REST SIMULADOS; sem validação de Supabase hospedado.')
+            print('UI OK: prévia, 47 produtos, modificadores inline, celular, offline, mesmo body/key no retry, pagamento dinheiro, auto-lock após 10 min e rotas por cargo. Auth/REST SIMULADOS; sem validação de Supabase hospedado.')
     finally:
         for proc in processes:
             os.killpg(proc.pid,signal.SIGTERM)

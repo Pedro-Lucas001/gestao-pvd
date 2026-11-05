@@ -14,6 +14,6 @@ for attempt in {1..30}; do
  if [[ "$attempt" == 30 ]]; then echo 'PostgreSQL did not start' >&2; exit 1; fi
  sleep 1
 done
-for sql in supabase/tests/bootstrap.sql supabase/migrations/*.sql supabase/seed.sql supabase/tests/rls.sql; do
+for sql in supabase/tests/bootstrap.sql supabase/migrations/*.sql supabase/seed.sql supabase/tests/rls.sql supabase/tests/advanced.sql; do
  docker exec -i "$container" psql -q -X -U postgres -v ON_ERROR_STOP=1 < "$sql"
 done

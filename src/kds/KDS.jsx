@@ -17,7 +17,7 @@ export default function KDS() {
     let query = supabase
       .from("kitchen_tickets")
       .select("id,order_number,customer,sector,items,status,created_at")
-      .neq("status", "ready")
+      .not("status", "in", "(ready,cancelled)")
       .order("created_at");
     if (profile.role === "kitchen") query = query.eq("sector", profile.sector);
     const { data, error } = await query;

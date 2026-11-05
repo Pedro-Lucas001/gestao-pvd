@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -8,6 +8,7 @@ import {
   NavLink,
   Link,
   useNavigate,
+  useLocation,
 } from "react-router-dom";
 import {
   ShoppingBag,
@@ -28,12 +29,24 @@ import {
 import AuthProvider from "./auth/AuthProvider";
 import { useAuth } from "./auth/context";
 import ProtectedRoute from "./auth/ProtectedRoute";
-import { configured, supabase, rpc } from "./lib/supabase";
+import { configured } from "./lib/supabase";
 import { useConnection } from "./components/useConnection";
 import ErrorBoundary from "./components/ErrorBoundary";
 import PDV from "./pdv/PDV";
 import KDS from "./kds/KDS";
+import TerminalLock from "./auth/TerminalLock";
 import "./App.css";
+const Reports = lazy(() => import("./admin/Reports"));
+const Inventory = lazy(() => import("./admin/Inventory"));
+const Catalog = lazy(() => import("./admin/Catalog"));
+const Payments = lazy(() => import("./admin/Payments"));
+const Audit = lazy(() => import("./admin/Audit"));
+const OrderLinks = lazy(() => import("./admin/OrderLinks"));
+const Team = lazy(() => import("./admin/Team"));
+const Fulfillment = lazy(() => import("./admin/Fulfillment"));
+const Integrations = lazy(() => import("./admin/Integrations"));
+const PublicOrder = lazy(() => import("./public/PublicOrder"));
+
 function Brand() {
   return (
     <div className="brand">
@@ -55,13 +68,24 @@ const routes = [
   ["/dashboard", "Visão geral", LayoutDashboard, ["admin"]],
   ["/estoque", "Estoque e fichas", PackageSearch, ["admin"]],
   ["/relatorios", "Relatórios", ChartNoAxesCombined, ["admin"]],
+  ["/atendimento", "Atendimento e delivery", Users, ["admin", "cashier"]],
+  ["/catalogo", "Cardápio", ShoppingBag, ["admin"]],
+  ["/pagamentos", "Pagamentos e estornos", LayoutDashboard, ["admin"]],
+  ["/auditoria", "Auditoria", ShieldCheck, ["admin"]],
+  ["/links", "QR e autoatendimento", ExternalLink, ["admin"]],
+  ["/integracoes", "Integrações", PackageSearch, ["admin"]],
   ["/equipe", "Equipe e acessos", Users, ["admin"]],
 ];
 function Shell({ preview = false }) {
-  const { profile, lock, signOut } = useAuth();
+  const { profile, lock, signOut, locked } = useAuth();
   const [menu, setMenu] = useState(false);
   const [lockError, setLockError] = useState("");
   const online = useConnection();
+  const path = useLocation().pathname;
+  const route = routes.find((r) => r[0] === path);
+  const gateRequired =
+    path !== "/acesso-negado" &&
+    (!route || preview || route[3].includes(profile.role));
   const list = preview
     ? routes.slice(0, 1)
     : routes.filter((r) => r[3].includes(profile.role));
@@ -162,21 +186,22 @@ function Shell({ preview = false }) {
               <span className="live-dot" />
               {online ? "Rede disponível" : "Sem internet"}
             </span>
-            {!preview && profile.role === "cashier" && (
-              <button
-                className="terminal-button"
-                onClick={() =>
-                  lock().catch(() =>
-                    setLockError(
-                      "O terminal foi bloqueado localmente, mas não foi possível revogar a sessão de operação no servidor. Reconecte; a liberação anterior expira em até 15 minutos.",
-                    ),
-                  )
-                }
-              >
-                <LockKeyhole size={14} />
-                Bloquear terminal
-              </button>
-            )}
+            {!preview &&
+              ["cashier", "kitchen", "admin"].includes(profile.role) && (
+                <button
+                  className="terminal-button"
+                  onClick={() =>
+                    lock().catch(() =>
+                      setLockError(
+                        "O terminal foi bloqueado localmente, mas não foi possível revogar a sessão de operação no servidor. Reconecte; a liberação anterior expira em até 15 minutos.",
+                      ),
+                    )
+                  }
+                >
+                  <LockKeyhole size={14} />
+                  Bloquear terminal
+                </button>
+              )}
           </div>
         </header>
         {lockError && (
@@ -207,7 +232,13 @@ function Shell({ preview = false }) {
         )}
         <main className="main-content">
           <ErrorBoundary area="workspace">
-            {preview ? <PDV preview /> : <Outlet />}
+            {preview ? (
+              <PDV preview />
+            ) : locked && gateRequired ? (
+              <TerminalLock />
+            ) : (
+              <Outlet />
+            )}
           </ErrorBoundary>
         </main>
         <footer>
@@ -219,7 +250,8 @@ function Shell({ preview = false }) {
   );
 }
 function Login() {
-  const { profile, loading, session, authError, retry, signOut } = useAuth();
+  const { profile, loading, session, authError, retry, signOut, signIn } =
+    useAuth();
   const online = useConnection();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -258,7 +290,7 @@ function Login() {
             setBusy(true);
             setError("");
             const body = Object.fromEntries(new FormData(e.currentTarget));
-            const { error } = await supabase.auth.signInWithPassword(body);
+            const { error } = await signIn(body);
             if (error)
               setError(
                 "Não foi possível entrar. Confira seu e-mail, senha e conexão.",
@@ -349,149 +381,33 @@ function Denied() {
     </div>
   );
 }
-function AdminFoundation({ kind }) {
-  const [team, setTeam] = useState([]),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  async function load() {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id,name,role,active,sector")
-      .order("name");
-    if (error) setError("Não foi possível carregar a equipe.");
-    else setTeam(data);
-  }
-  const titles = {
-    dashboard: "Visão geral",
-    estoque: "Estoque e fichas técnicas",
-    relatorios: "Relatórios operacionais",
-    equipe: "Equipe e acessos",
+function AdminModule({ kind }) {
+  const views = {
+    dashboard: Reports,
+    relatorios: Reports,
+    estoque: Inventory,
+    equipe: Team,
+    catalogo: Catalog,
+    pagamentos: Payments,
+    auditoria: Audit,
+    links: OrderLinks,
+    integracoes: Integrations,
   };
+  const View = views[kind];
   return (
-    <section className="foundation">
-      <span className="eyebrow">ÁREA EXCLUSIVA DO ADMINISTRADOR</span>
-      <h1>{titles[kind]}</h1>
-      {kind === "equipe" ? (
-        <>
-          <p>
-            Crie as contas pelo Supabase Auth com cadastro público desativado.
-            Aqui, ative o acesso e configure os PINs. Novas contas ficam
-            inativas por padrão.
-          </p>
-          <button className="secondary" onClick={load}>
-            Carregar equipe
-          </button>
-          {team.map((p) => (
-            <form
-              className="staff-row"
-              key={p.id}
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setError("");
-                setBusy(true);
-                const values = Object.fromEntries(
-                  new FormData(e.currentTarget),
-                );
-                try {
-                  if (
-                    values.pin &&
-                    (values.role !== "cashier" || values.active !== "true")
-                  )
-                    throw new Error(
-                      "Configure PIN apenas para um caixa ativo. Nenhuma alteração foi salva.",
-                    );
-                  await rpc("manage_staff", {
-                    p_user: p.id,
-                    p_role: values.role,
-                    p_sector: values.role === "kitchen" ? values.sector : null,
-                    p_active: values.active === "true",
-                  });
-                  if (values.pin)
-                    await rpc("set_staff_pin", {
-                      p_user: p.id,
-                      p_pin: values.pin,
-                    });
-                  await load();
-                } catch (e) {
-                  setError(e.message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <strong>{p.name}</strong>
-              <label>
-                Função
-                <select name="role" defaultValue={p.role}>
-                  <option value="cashier">Caixa</option>
-                  <option value="kitchen">Cozinha</option>
-                  <option value="admin">Administrador</option>
-                </select>
-              </label>
-              <label>
-                Setor
-                <select name="sector" defaultValue={p.sector || "grill"}>
-                  <option value="grill">Chapa</option>
-                  <option value="fryer">Fritura</option>
-                  <option value="bar">Bebidas</option>
-                </select>
-              </label>
-              <label>
-                Acesso
-                <select name="active" defaultValue={String(p.active)}>
-                  <option value="true">Ativo</option>
-                  <option value="false">Bloqueado</option>
-                </select>
-              </label>
-              <label>
-                Novo PIN de caixa
-                <input
-                  name="pin"
-                  type="password"
-                  inputMode="numeric"
-                  pattern="[0-9]{4}"
-                  maxLength={4}
-                  placeholder="Opcional"
-                  autoComplete="new-password"
-                />
-              </label>
-              <button className="primary" disabled={busy}>
-                Salvar acesso
-              </button>
-            </form>
-          ))}
-        </>
-      ) : (
-        <>
-          <p>
-            A estrutura deste módulo está preparada no banco, com acesso
-            restrito por RLS. O escopo desta entrega é o PDV inicial; esta tela
-            não simula relatórios nem controles de estoque operacionais.
-          </p>
-          <div className="info-panel">
-            <h2>
-              {kind === "estoque"
-                ? "Fichas técnicas e movimentos"
-                : kind === "relatorios"
-                  ? "Consultas de analytics"
-                  : "Dados reais, sem números inventados"}
-            </h2>
-            <p>
-              {kind === "estoque"
-                ? "Ingredientes, unidades, custos e movimentos de baixa estão modelados. Cadastre receitas reais antes de ativar controle de insumos."
-                : kind === "relatorios"
-                  ? "Consultas de pico de vendas, margem e tempo por setor estão em docs/analytics.sql. Custos são exclusivos do administrador."
-                  : "Crie o projeto Supabase e aplique as migrações para começar a operar o PDV. Os módulos de gestão serão evoluídos sobre a mesma base."}
-            </p>
-          </div>
-        </>
-      )}
-      {error && (
-        <p role="alert" className="error-message">
-          {error}
-        </p>
-      )}
-    </section>
+    <Suspense fallback={<div className="loading">Carregando gestão…</div>}>
+      <View />
+    </Suspense>
+  );
+}
+function PublicAware({ children }) {
+  const path = useLocation().pathname;
+  return path === "/pedido" ? (
+    <Suspense fallback={<div className="loading">Carregando cardápio…</div>}>
+      <PublicOrder />
+    </Suspense>
+  ) : (
+    children
   );
 }
 export default function App() {
@@ -499,46 +415,70 @@ export default function App() {
     <ErrorBoundary area="application">
       <BrowserRouter>
         <AuthProvider>
-          {!configured ? (
-            <Shell preview />
-          ) : (
-            <Routes>
-              <Route path="/previa" element={<Shell preview />} />
-              <Route path="/login" element={<Login />} />
-              <Route
-                element={
-                  <ProtectedRoute roles={["admin", "cashier", "kitchen"]} />
-                }
-              >
-                <Route element={<Shell />}>
-                  <Route index element={<Home />} />
-                  <Route path="acesso-negado" element={<Denied />} />
-                  <Route
-                    element={<ProtectedRoute roles={["admin", "cashier"]} />}
-                  >
-                    <Route path="pdv" element={<PDV />} />
-                  </Route>
-                  <Route
-                    element={<ProtectedRoute roles={["admin", "kitchen"]} />}
-                  >
-                    <Route path="cozinha" element={<KDS />} />
-                  </Route>
-                  <Route element={<ProtectedRoute roles={["admin"]} />}>
-                    {["dashboard", "estoque", "relatorios", "equipe"].map(
-                      (kind) => (
+          <PublicAware>
+            {!configured ? (
+              <Shell preview />
+            ) : (
+              <Routes>
+                <Route path="/previa" element={<Shell preview />} />
+                <Route path="/login" element={<Login />} />
+                <Route
+                  element={
+                    <ProtectedRoute roles={["admin", "cashier", "kitchen"]} />
+                  }
+                >
+                  <Route element={<Shell />}>
+                    <Route index element={<Home />} />
+                    <Route path="acesso-negado" element={<Denied />} />
+                    <Route
+                      element={<ProtectedRoute roles={["admin", "cashier"]} />}
+                    >
+                      <Route path="pdv" element={<PDV />} />
+                      <Route
+                        path="atendimento"
+                        element={
+                          <Suspense
+                            fallback={
+                              <div className="loading">
+                                Carregando atendimentos…
+                              </div>
+                            }
+                          >
+                            <Fulfillment />
+                          </Suspense>
+                        }
+                      />
+                    </Route>
+                    <Route
+                      element={<ProtectedRoute roles={["admin", "kitchen"]} />}
+                    >
+                      <Route path="cozinha" element={<KDS />} />
+                    </Route>
+                    <Route element={<ProtectedRoute roles={["admin"]} />}>
+                      {[
+                        "dashboard",
+                        "estoque",
+                        "relatorios",
+                        "equipe",
+                        "catalogo",
+                        "pagamentos",
+                        "auditoria",
+                        "links",
+                        "integracoes",
+                      ].map((kind) => (
                         <Route
                           key={kind}
                           path={kind}
-                          element={<AdminFoundation kind={kind} key={kind} />}
+                          element={<AdminModule kind={kind} key={kind} />}
                         />
-                      ),
-                    )}
+                      ))}
+                    </Route>
+                    <Route path="*" element={<Navigate to="/" replace />} />
                   </Route>
-                  <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
-              </Route>
-            </Routes>
-          )}
+              </Routes>
+            )}
+          </PublicAware>
         </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>

@@ -13,6 +13,7 @@
     "validate": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
+    "@sentry/react": "^10.5.0",
     "@supabase/supabase-js": "^2.99.0",
     "lucide-react": "^1.69.0",
     "qrcode.react": "^4.2.0",

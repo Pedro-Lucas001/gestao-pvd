@@ -67,3 +67,38 @@ test("RPC composite accepts object or a single-row response and rejects ambiguit
   for (const invalid of [null, [], [{}, {}], {}])
     assert.throws(() => oneRecord(invalid));
 });
+
+test("inactivity locks at ten minutes even when a wall clock moves backwards", async () => {
+  const { expiredActivity, IDLE_LIMIT_MS } = await import(
+    "../src/auth/useIdleLock.js"
+  );
+  assert.equal(IDLE_LIMIT_MS, 600000);
+  assert.equal(expiredActivity(1000, 100, 600999, 600099), false);
+  assert.equal(expiredActivity(1000, 100, 601000, 600100), true);
+  assert.equal(expiredActivity(1000, 100, -1000, 600100), true);
+});
+
+test("network timeout aborts a waiting request without discarding auth headers", async () => {
+  const { fetchWithTimeout } = await import("../src/lib/network.js");
+  let captured;
+  const transport = (_url, init) =>
+    new Promise((_resolve, reject) => {
+      captured = init;
+      init.signal.addEventListener(
+        "abort",
+        () => reject(new Error("TEST_TIMEOUT")),
+        { once: true },
+      );
+    });
+  await assert.rejects(
+    fetchWithTimeout(
+      "https://example.test",
+      { headers: { Authorization: "test-fixture-only" } },
+      transport,
+      5,
+    ),
+    /TEST_TIMEOUT/,
+  );
+  assert.equal(captured.headers.Authorization, "test-fixture-only");
+  assert.equal(captured.signal.aborted, true);
+});

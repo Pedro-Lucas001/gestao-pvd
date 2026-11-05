@@ -34,6 +34,11 @@ Deno.serve(async (req: Request) => {
     )
       return reply({ error: "INVALID_REQUEST" }, 400);
     const adapter = gateway(); // Check availability before reserving an attempt.
+    if (!adapter.supports.includes(method))
+      return reply(
+        { error: "TEF ainda não configurado para uma maquininha homologada." },
+        503,
+      );
     const { data: result, error } = await client.rpc("begin_payment", {
       p_order: orderId,
       p_method: method,
@@ -48,6 +53,20 @@ Deno.serve(async (req: Request) => {
       amountCents: attempt.amount_cents,
       method,
     });
+    if (intent.pix) {
+      const trusted = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { auth: { persistSession: false } },
+      );
+      const { error: recordError } = await trusted.rpc("record_pix_artifact", {
+        p_attempt: attempt.id,
+        p_code: intent.pix.copyPaste,
+        p_expires: intent.pix.expiresAt,
+      });
+      if (recordError)
+        return reply({ error: "PIX_RESPONSE_UNCONFIRMED_RETRY_SAME_KEY" }, 502);
+    }
     return reply({ attemptId: attempt.id, ...intent });
   } catch (error) {
     if (error instanceof RangeError)

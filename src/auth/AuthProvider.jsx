@@ -1,23 +1,49 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AuthContext } from "./context";
 import { supabase, rpc } from "../lib/supabase";
+import { deviceToken } from "./device";
+import { useIdleLock } from "./useIdleLock";
 export default function AuthProvider({ children }) {
   const [session, setSession] = useState(null),
     [profile, setProfile] = useState(null),
     [loading, setLoading] = useState(true),
     [authError, setAuthError] = useState(""),
-    [lease, setLease] = useState(0);
+    [lease, setLease] = useState(0),
+    [idleLocked, setIdleLocked] = useState(false);
+  const leaseRef = useRef(0),
+    lastHeartbeat = useRef(0);
   const epoch = useRef(0);
   const currentUser = useRef(null);
   const profileReady = useRef(false);
   const currentRole = useRef(null);
-  const loadProfile = useCallback(async (s) => {
+  const loadProfile = useCallback(async (s, resetIdle = false) => {
     const current = ++epoch.current;
     currentUser.current = s?.user.id || null;
     profileReady.current = false;
     setSession(s);
     setProfile(null);
     setLease(0);
+    let shouldLock = false;
+    if (s) {
+      try {
+        const stored = JSON.parse(
+          sessionStorage.getItem(`planeta:idle:${s.user.id}`) || "null",
+        );
+        shouldLock =
+          !resetIdle &&
+          Boolean(
+            stored && (stored.locked || Date.now() - stored.activity >= 600000),
+          );
+        if (resetIdle)
+          sessionStorage.setItem(
+            `planeta:idle:${s.user.id}`,
+            JSON.stringify({ locked: false, activity: Date.now() }),
+          );
+      } catch {
+        shouldLock = true;
+      }
+    }
+    setIdleLocked(shouldLock);
     setLoading(true);
     setAuthError("");
     if (!s) {
@@ -99,21 +125,85 @@ export default function AuthProvider({ children }) {
     };
   }, [loadProfile]);
   useEffect(() => {
+    leaseRef.current = lease;
+  }, [lease]);
+  const persistIdle = useCallback((locked) => {
+    if (currentUser.current)
+      try {
+        sessionStorage.setItem(
+          `planeta:idle:${currentUser.current}`,
+          JSON.stringify({ locked, activity: Date.now() }),
+        );
+      } catch {
+        /* Local lock still applies in memory. */
+      }
+  }, []);
+  const lastActivitySave = useRef(0);
+  const idleLock = useCallback(() => {
+    persistIdle(true);
+    setIdleLocked(true);
+    setLease(0);
+    rpc("lock_terminal").catch(() => {});
+  }, [persistIdle]);
+  const activity = useCallback(() => {
+    if (Date.now() - lastActivitySave.current > 5000) {
+      persistIdle(false);
+      lastActivitySave.current = Date.now();
+    }
+    if (!leaseRef.current || Date.now() - lastHeartbeat.current < 30000) return;
+    lastHeartbeat.current = Date.now();
+    rpc("heartbeat_terminal")
+      .then((result) => {
+        if (result.ok) setLease(new Date(result.expires_at).getTime());
+        else {
+          persistIdle(true);
+          setLease(0);
+          setIdleLocked(true);
+        }
+      })
+      .catch(() => {});
+  }, [persistIdle]);
+  const locked = Boolean(
+    profile &&
+      (idleLocked || (["cashier", "kitchen"].includes(profile.role) && !lease)),
+  );
+  useIdleLock(Boolean(profile) && !locked, idleLock, activity);
+  useEffect(() => {
     if (!lease) return;
     const timer = setTimeout(
-      () => setLease(0),
+      () => {
+        persistIdle(true);
+        setLease(0);
+        setIdleLocked(true);
+      },
       Math.max(0, lease - Date.now()),
     );
     return () => clearTimeout(timer);
-  }, [lease]);
+  }, [lease, persistIdle]);
   async function lock() {
+    persistIdle(true);
     setLease(0);
+    setIdleLocked(true);
     await rpc("lock_terminal");
   }
   async function unlock(pin) {
-    const result = await rpc("unlock_terminal", { p_pin: pin });
-    if (!result.ok) throw new Error(result.error);
+    const result = await rpc("unlock_terminal", {
+      p_pin: pin,
+      p_terminal_token: deviceToken(),
+    });
+    if (!result.ok) {
+      const failure = new Error(result.error);
+      failure.retryAt = result.retry_at;
+      throw failure;
+    }
+    persistIdle(false);
+    setIdleLocked(false);
     setLease(new Date(result.expires_at).getTime());
+  }
+  async function signIn(body) {
+    const result = await supabase.auth.signInWithPassword(body);
+    if (!result.error) await loadProfile(result.data.session, true);
+    return { error: result.error };
   }
   async function signOut() {
     setLease(0);
@@ -137,10 +227,11 @@ export default function AuthProvider({ children }) {
         profile,
         loading,
         authError,
-        locked: profile?.role === "cashier" && !lease,
+        locked,
         unlock,
         lock,
         signOut,
+        signIn,
         retry: () => loadProfile(session),
       }}
     >

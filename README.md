@@ -1,54 +1,59 @@
-# Planeta Lanches · PDV + Supabase
+# Planeta Lanches · operação e gestão
 
-React com visual **cinza-aço e laranja-fogo**, Supabase Auth/PostgreSQL/RLS e fundação do KDS com Realtime. Esta entrega contém a arquitetura, o esquema relacional e o código inicial do **Módulo 1 — frente de caixa**; não é uma implantação pronta de todos os módulos descritos.
+React + Supabase (PostgreSQL/Auth/Realtime), com interface cinza-aço e laranja-fogo. Os módulos estão conectados a dados reais do projeto quando configurado; sem Supabase, a aplicação exibe uma prévia visual e bloqueia transações.
 
-## Começar
+## Módulos implementados no código
 
-Node.js 22.12+ (ou 20.19+):
+- **PDV:** catálogo, quantidades, modificadores inline, preços calculados no banco, turno individual, sangria/suprimento, fechamento e retomada de pedidos pendentes.
+- **KDS:** tickets por setor, sem dados de contato nem valores; cores por espera, atualizações Realtime e ressincronização/polling.
+- **Autoatendimento:** links/QRs revogáveis para mesas/delivery, catálogo público seguro, criação idempotente, acompanhamento pessoal e Pix com valor do pedido.
+- **Gestão:** edição de produtos, ingredientes/custos, saldos, fichas técnicas e consumo por modificador; descontos, estornos integrais, equipe, terminais, delivery e auditoria.
+- **Relatórios:** receita confirmada, horários de pico, descontos, margens estimadas pela receita atual, tempos por setor e alertas de estoque.
+- **WhatsApp oficial:** webhook assinado para texto, FAQ determinístico, atribuição de atendimento, resposta do operador e notificações por status com consentimento/janela/templates, fila com lease e retry. Exige habilitação da API oficial; o aplicativo Business sozinho não é essa API.
+
+## Segurança avançada
+
+Auditoria automática e append-only no PostgreSQL registra usuário/origem, ação, data, valor, justificativa e quantidade de estoque. Usuários da aplicação, inclusive admin e service role, não têm rota/permissão de editar, apagar ou truncar os logs; triggers bloqueiam DML comum até do dono da tabela. O proprietário do banco continua tendo poder de alterar o schema — proteção contra esse privilégio exige controles externos, conforme [docs/security.md](docs/security.md).
+
+Terminais são cadastrados por admin e identificados por token aleatório, mantido ao trocar de operador. **Cinco PINs incorretos consecutivos no mesmo terminal bloqueiam por três minutos**, com contador no banco. PINs são hashes bcrypt privados. PDV/KDS e áreas autenticadas bloqueiam após **10 minutos sem entrada real do usuário**; polling/Realtime não mantêm o terminal destravado. Ao bloquear, o conteúdo sensível é desmontado da tela. Dados de contato do delivery têm RLS separada: cozinha não acessa/exporta; o responsável vê apenas pedidos pagos em andamento.
+
+## Pix da conta Nubank física
+
+Conforme a configuração informada pela loja, o código suporta **BR Code/QR estático com o valor exato**, usando a chave cadastrada nos segredos do servidor. Não é Pix Cob dinâmico nem uma API bancária. Não há expiração bancária automática, consulta de saldo, comprovação automática ou transferência de devolução.
+
+O **administrador confere o crédito no extrato**, informa uma referência bancária única e a justificativa. Só então o banco libera cozinha e baixa insumos. A mesma referência normalizada não pode pagar dois pedidos. Devolução Pix deve ser feita no app Nubank e depois registrada; gerar QR ou solicitar estorno não equivale a receber/devolver dinheiro. Para automação financeira real é necessário contratar/acessar um PSP com API homologada. **TEF permanece indisponível**, pois maquininha/serviço não foram informados.
+
+## Executar
+
+Requer Node.js 22.12+ ou 20.19+:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Sem variáveis Supabase, a aplicação abre uma **prévia visual**, com os 47 produtos reais do cardápio, imagens ilustrativas, filtros, carrinho e modificadores inline. Nenhum login, pedido ou pagamento real é simulado. Combos aparecem como categoria vazia até cadastro de combinações reais.
+Sem variáveis abre a prévia; não cria pedidos reais. Para operar, crie o projeto Supabase, aplique **todas as migrações em ordem**, carregue o seed, crie o admin e configure `.env.local` usando `.env.example`. As Edge Functions usam segredos próprios exemplificados em `supabase/.env.example`; **nunca coloque chave bancária, service role, PIN, senha ou tokens em VITE_***.
 
-Para operar: crie um projeto Supabase, siga [docs/deploy.md](docs/deploy.md), aplique as migrações e seed, crie as contas e configure os valores públicos de `.env.example` em `.env.local`. Com Supabase configurado, os acessos são individuais:
+[Passo a passo de ativação](docs/activation.md) · [Arquitetura](docs/architecture.md) · [Segurança e privacidade](docs/security.md) · [Deploy/pooler/backup](docs/deploy.md).
 
-- **Admin:** PDV, KDS e áreas de gestão protegidas; criação de perfis/ativação/PINs. As telas de estoque/relatórios são fundações documentadas, não módulos completos.
-- **Caixa:** somente PDV, turno próprio e próprios pedidos. E-mail/senha + PIN pessoal de 4 dígitos para destravar o terminal, com limite de tentativas e lease de 15 min no servidor.
-- **Cozinha:** somente KDS e tickets do seu setor, sem valores financeiros.
+## SQL Editor solicitado: contrato independente em português
 
-O PostgreSQL calcula os totais e valida modificadores; não aceita o preço informado pelo navegador. Confirmação manual de **dinheiro** libera o pedido; **Pix e TEF ainda exigem provedor e homologação**, e os adaptadores falham fechados. Pedidos e tentativas usam idempotência para retry sem duplicação. Offline preserva o rascunho e bloqueia envios/pagamentos até reconectar.
+[Instalação e diferenças de contrato](supabase/sql_editor/README.md) · [Partes 5/6, IA, fidelidade, gateways e LGPD](supabase/sql_editor/ECOSSISTEMA.md).
 
-## Estrutura
+Os dois arquivos de `supabase/sql_editor/` são uma **alternativa de esquema**, com os nomes em português pedidos. Não aplique junto com `supabase/migrations/`: o frontend operacional acima usa campos/cargos em inglês. Os endpoints `eco-*` e o portal estático dessa pasta usam exclusivamente o contrato em português; URL/API key não adaptam o frontend automaticamente. Essa separação evita sobrescrever um projeto existente.
 
-```text
-src/auth/              sessão, PIN e proteção de rotas por cargo
-src/pdv/               catálogo, carrinho, personalização, turno e pagamentos
-src/kds/               tickets por setor, cores por tempo e ressincronização
-src/components/        Error Boundaries e detecção de rede
-src/lib/               cliente Supabase, operações puras e monitoramento
-supabase/migrations/   tabelas, RLS, grants e RPCs transacionais
-supabase/functions/    contratos de Pix/TEF e webhook fail-closed
-supabase/seed.sql      47 produtos; sem estoque/custos/receitas inventados
-supabase/tests/        testes de autorização e transações em PostgreSQL real
-docs/                  arquitetura, implantação e consultas de analytics
-```
-
-- [Arquitetura e modelo relacional](docs/architecture.md), com limites, RLS, idempotência, PIN, estoque, Realtime, autoatendimento e WhatsApp.
-- [Implantação e variáveis staging/production](docs/deploy.md), Vercel, pooler, backups e monitoramento.
-- [Consultas de analytics para admin](docs/analytics.sql): picos de horário, margem por ficha e gargalos.
-- [Testes e evidências](tests/README.md).
-
-## Validar e compilar
+## Validar
 
 ```sh
 npm run validate
 npm run test:db
-npm run build
+bash scripts/test-sql-editor.sh
+deno check supabase/functions/*/index.ts
+deno test supabase/functions/_shared/*_test.ts
 ```
 
-`test:db` exige Docker local e usa PostgreSQL descartável sem portas publicadas. Não usa credenciais nem banco da loja. Não substitui homologação em Supabase hospedado. O frontend pode ser publicado na Vercel com a configuração versionada, mas nenhum serviço foi publicado automaticamente.
+O banco de teste é PostgreSQL real descartável, sem portas publicadas nem dados reais. Testes opcionais de navegador em [tests/README.md](tests/README.md) usam Auth/REST simulados e não substituem homologação do Supabase hospedado ou da Meta.
 
-A versão anterior Python/SQLite e seus testes permanecem no histórico/arquivos para consulta; **não fazem parte do backend ativo desta versão**. Não execute `server.py` para usar o PDV Supabase. Os usuários, pedidos e saldos antigos não foram migrados nem apagados. A migração de dados exige um procedimento separado com conferência de saldos e contas. O catálogo estático anterior foi mantido para a prévia; no modo real, o catálogo vem do PostgreSQL, com o seed do cardápio e as bebidas 200 ml confirmadas pela loja.
+Os 47 produtos do cardápio estão no seed; novas alterações usam o banco. Não foram inventados custos, estoque, combos, receitas ou taxas de entrega. Configure as condições de entrega e o catálogo real antes de divulgar links. Consumo de modificadores requer regras cadastradas; sem regra, vale a ficha padrão. Saldo negativo não apaga uma venda já paga: gera alerta para conferência.
+
+O histórico Python/SQLite foi preservado, mas não é o backend desta versão. Dados antigos não foram apagados nem migrados automaticamente. Nenhuma conta bancária, conta Meta, projeto Supabase ou implantação hospedada foi criada/ativada por estes comandos.

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'"
+    >
+    <title>Seus dados · Planeta Lanches</title>
+    <link rel="stylesheet" href="./privacy.css">
+    <script src="./privacy.js" defer></script>
+  </head>
+  <body>
+    <main data-api-url="https://SEU-PROJETO.supabase.co/functions/v1/eco-lgpd">
+      <p class="eyebrow">PLANETA LANCHES</p>
+      <h1>Você controla seus dados.</h1>
+      <p>
+        Usamos seu contato e endereço para atender e entregar os pedidos. O
+        atendimento automático processa o texto da conversa pelos serviços Meta
+        e OpenAI. Promoções dependem da sua autorização, que pode ser retirada
+        enviando <strong>SAIR</strong> no WhatsApp.
+      </p>
+      <p>
+        As conversas ficam disponíveis por até 7 dias. Contatos sem compras e
+        sem interação são apagados após 90 dias. Registros mínimos de compras,
+        pontos e auditoria podem permanecer sem os dados de contato para
+        conciliação e obrigações legais. Para consultar os prazos de retenção e
+        falar com o responsável pelos seus dados, entre em contato pelo WhatsApp
+        (81) 98227-3660.
+      </p>
+      <p id="status" role="status" aria-live="polite">Validando link…</p>
+      <section aria-label="Seus direitos">
+        <button id="export" disabled>Baixar relatório dos meus dados</button>
+        <label class="confirm"><input type="checkbox" id="confirm-forget"> Quero
+          apagar meus contatos e conversas. Se houver pedido em andamento, a
+          solicitação será concluída quando ele for encerrado.</label>
+        <button id="forget" class="danger" disabled>Esquecer meus dados</button>
+      </section>
+      <section aria-label="Consentimento para anúncios">
+        <h2>Anúncios externos</h2>
+        <p>
+          Opcional e separado das promoções do WhatsApp: autorizar o envio do
+          identificador do pedido e valor da compra para medição de anúncios.
+          Telefone e endereço não são enviados por esta integração.
+        </p>
+        <button id="allow-ads" disabled>Autorizar medição de anúncios</button>
+        <button id="deny-ads" disabled>Revogar autorização de anúncios</button>
+      </section>
+      <p class="small">
+        O link é pessoal e expira em 15 minutos. Não o compartilhe. Para receber
+        outro, envie PRIVACIDADE ao WhatsApp do Planeta Lanches. Este portal não
+        usa rastreadores nem guarda o relatório no navegador.
+      </p>
+    </main>
+  </body>
+</html>
