@@ -76,6 +76,7 @@ export async function rpc(name, args) {
 }
 export function friendlyError(message = "") {
   const errors = {
+    staff_pin_in_use: "Este PIN já está em uso por outro funcionário ativo. Escolha quatro dígitos diferentes.",
     justification_required:
       "Informe uma justificativa entre 5 e 500 caracteres.",
     insufficient_cash:

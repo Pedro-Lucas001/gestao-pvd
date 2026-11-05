@@ -60,6 +60,14 @@ def mock_api(route):
         data={'access_token':jwt(role),'refresh_token':'fake-refresh-for-ui-test','token_type':'bearer','expires_in':3600,'user':{'id':IDS[role],'aud':'authenticated','role':'authenticated','email':body['email'],'app_metadata':{},'user_metadata':{}}}
     elif path=='/auth/v1/logout':
         data={}
+    elif path=='/rest/v1/rpc/operator_context':
+        data={'id':IDS[role],'name':role.capitalize(),'role':role,'active':True,'requires_password':False,'sector':'grill' if role=='kitchen' else None}
+    elif path=='/rest/v1/rpc/kitchen_load_snapshot':
+        data=[{'sector':sector,'queued_items':0,'preparing_items':0,'average_unit_seconds':180,'reference_unit_seconds':180,'parallel_capacity':3,'critical_items':15,'sample_count':0} for sector in ['grill','fryer','bar']]
+    elif path=='/rest/v1/rpc/admin_metrics':
+        data={'revenue_cents':0,'paid_orders':0,'discounts_cents':0,'cancelled':0,'cancelled_credit_cents':0,'peaks':[],'margins':[],'bottlenecks':[],'low_stock':[]}
+    elif path=='/auth/v1/user':
+        data={'id':IDS[role],'aud':'authenticated','role':'authenticated','email':role+'@fixture.test','app_metadata':{},'user_metadata':{}}
     elif path=='/rest/v1/profiles':
         data={'id':IDS[role],'name':role.capitalize(),'role':role,'active':True,'sector':'grill' if role=='kitchen' else None}
     elif path=='/rest/v1/products':
@@ -175,6 +183,7 @@ if __name__=='__main__':
                     page.get_by_role('button',name='Destravar terminal').click()
                     expect(page.get_by_role('heading',name='Pagamento confirmado.')).to_be_visible()
                 if role in ['cashier','kitchen']:
+                    expect(page.locator('.sidebar')).to_have_count(0)
                     for path in ['/dashboard','/estoque','/relatorios','/equipe']:
                         page.goto(f'http://127.0.0.1:{app_port}'+path)
                         expect(page.get_by_role('heading',name='Esta área tem outro destino.')).to_be_visible()

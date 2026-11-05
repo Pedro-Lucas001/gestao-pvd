@@ -13,7 +13,7 @@ export function cents(value) {
 }
 export function urgency(createdAt, now = Date.now()) {
   const minutes = Math.max(0, (now - new Date(createdAt).getTime()) / 60000);
-  return minutes >= 15 ? "critical" : minutes >= 8 ? "warning" : "normal";
+  return minutes > 20 ? "critical" : minutes >= 10 ? "warning" : "normal";
 }
 export function toggleModifier(current, value) {
   if (current.includes(value)) return current.filter((x) => x !== value);

@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
-import { LockKeyhole, ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, LockKeyhole } from "lucide-react";
 import { useAuth } from "./context";
+import PinPad from "./PinPad";
 import { deviceToken } from "./device";
 import { useConnection } from "../components/useConnection";
 export default function TerminalLock() {
@@ -36,6 +37,7 @@ export default function TerminalLock() {
             setPin("");
             setRetryAt(0);
           } catch (e) {
+            setPin("");
             setError(e.message);
             setRetryAt(e.retryAt ? new Date(e.retryAt).getTime() : 0);
             setNow(Date.now());
@@ -44,23 +46,12 @@ export default function TerminalLock() {
           }
         }}
       >
-        <label>
-          PIN de 4 dígitos
-          <input
-            className="pin-input"
-            aria-label="PIN de 4 dígitos"
-            inputMode="numeric"
-            type="password"
-            pattern="[0-9]{4}"
-            maxLength={4}
-            minLength={4}
-            value={pin}
-            autoComplete="off"
-            required
-            disabled={remaining > 0 || busy}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-          />
-        </label>
+        <PinPad
+          value={pin}
+          onChange={setPin}
+          disabled={remaining > 0 || busy}
+          id="unlock-pin"
+        />
         {error && (
           <p className="error-message" role="alert">
             {error}

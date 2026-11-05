@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.99.0";
-import { cors, response, readLimited } from "../_shared/http.ts";
+import { cors, readLimited, response } from "../_shared/http.ts";
 Deno.serve(async (req: Request) => {
   const headers = cors(req);
   if (!headers) return response({ error: "ORIGIN_NOT_ALLOWED" }, 403);
@@ -21,13 +21,15 @@ Deno.serve(async (req: Request) => {
     error,
   } = await userClient.auth.getUser();
   if (error || !user) return reply({ error: "AUTH_REQUIRED" }, 401);
-  const { data: profile } = await userClient
-    .from("profiles")
-    .select("role,active")
-    .eq("id", user.id)
-    .single();
-  if (!profile?.active || profile.role !== "admin")
+  const { data: profile, error: profileError } = await userClient.rpc(
+    "operator_context",
+  );
+  if (
+    profileError || !profile?.active || profile.role !== "admin" ||
+    profile.requires_password
+  ) {
     return reply({ error: "ADMIN_REQUIRED" }, 403);
+  }
   try {
     const body = JSON.parse(
       new TextDecoder().decode(await readLimited(req, 8192)),
@@ -41,8 +43,9 @@ Deno.serve(async (req: Request) => {
       typeof body.name !== "string" ||
       body.name.trim().length < 2 ||
       !["admin", "cashier", "kitchen"].includes(body.role)
-    )
+    ) {
       return reply({ error: "INVALID_STAFF_DATA" }, 400);
+    }
     const db = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -54,8 +57,9 @@ Deno.serve(async (req: Request) => {
       email_confirm: true,
       user_metadata: { name: body.name.trim() },
     });
-    if (error || !data.user)
+    if (error || !data.user) {
       return reply({ error: "USER_CREATION_FAILED_CHECK_EXISTING_EMAIL" }, 409);
+    }
     const { error: activation } = await userClient.rpc("manage_staff", {
       p_user: data.user.id,
       p_role: body.role,
@@ -63,7 +67,7 @@ Deno.serve(async (req: Request) => {
       p_active: true,
       p_reason: "Cadastro autorizado de funcionário pela administração",
     });
-    if (activation)
+    if (activation) {
       return reply(
         {
           error: "ACCOUNT_CREATED_INACTIVE_FINISH_IN_TEAM",
@@ -71,23 +75,26 @@ Deno.serve(async (req: Request) => {
         },
         409,
       );
+    }
     if (body.pin) {
       const { error } = await userClient.rpc("set_staff_pin", {
         p_user: data.user.id,
         p_pin: body.pin,
       });
-      if (error)
+      if (error) {
         return reply(
           { error: "ACCOUNT_CREATED_SET_PIN_IN_TEAM", userId: data.user.id },
           409,
         );
+      }
     }
     return reply({ ok: true, userId: data.user.id }, 201);
   } catch (e) {
     return reply(
       {
-        error:
-          e instanceof RangeError ? "PAYLOAD_TOO_LARGE" : "INVALID_REQUEST",
+        error: e instanceof RangeError
+          ? "PAYLOAD_TOO_LARGE"
+          : "INVALID_REQUEST",
       },
       400,
     );

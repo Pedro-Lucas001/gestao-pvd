@@ -5,7 +5,9 @@ React + Supabase (PostgreSQL/Auth/Realtime), com interface cinza-aço e laranja-
 ## Módulos implementados no código
 
 - **PDV:** catálogo, quantidades, modificadores inline, preços calculados no banco, turno individual, sangria/suprimento, fechamento e retomada de pedidos pendentes.
-- **KDS:** tickets por setor, sem dados de contato nem valores; cores por espera, atualizações Realtime e ressincronização/polling.
+- **KDS tático:** tickets por praça, sem contato/valores, cores em 10/20 minutos, filtros, carga por quantidade e previsão de gargalo compartilhada com caixa/admin via Realtime.
+- **Login touch:** abas de administração por e-mail/senha e Fast-Pass individual por PIN em terminal cadastrado, com sessão Auth real e menus restritos por cargo.
+- **DRE gerencial:** vendas, estornos, consumo com custo capturado e despesas auditadas; sinaliza dados incompletos/estimados.
 - **Autoatendimento:** links/QRs revogáveis para mesas/delivery, catálogo público seguro, criação idempotente, acompanhamento pessoal e Pix com valor do pedido.
 - **Gestão:** edição de produtos, ingredientes/custos, saldos, fichas técnicas e consumo por modificador; descontos, estornos integrais, equipe, terminais, delivery e auditoria.
 - **Relatórios:** receita confirmada, horários de pico, descontos, margens estimadas pela receita atual, tempos por setor e alertas de estoque.
@@ -57,3 +59,5 @@ O banco de teste é PostgreSQL real descartável, sem portas publicadas nem dado
 Os 47 produtos do cardápio estão no seed; novas alterações usam o banco. Não foram inventados custos, estoque, combos, receitas ou taxas de entrega. Configure as condições de entrega e o catálogo real antes de divulgar links. Consumo de modificadores requer regras cadastradas; sem regra, vale a ficha padrão. Saldo negativo não apaga uma venda já paga: gera alerta para conferência.
 
 O histórico Python/SQLite foi preservado, mas não é o backend desta versão. Dados antigos não foram apagados nem migrados automaticamente. Nenhuma conta bancária, conta Meta, projeto Supabase ou implantação hospedada foi criada/ativada por estes comandos.
+
+O login touch/KDS tático requer as incrementais 012–014 e deploy da função `fast-pass`. O painel de demanda usa referências iniciais claramente identificadas até haver amostras reais; configure a capacidade do turno no KDS do admin. [Ativação detalhada](docs/activation.md#6-login-touch-fast-pass-e-kds-tático).

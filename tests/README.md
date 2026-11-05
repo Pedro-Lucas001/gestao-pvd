@@ -44,3 +44,9 @@ Aplicar/homologar staging Supabase com JWTs reais, Realtime entre terminais, poo
 `bash scripts/test-sql-editor.sh` cria um PostgreSQL descartável separado para os scripts em português, sem misturar com as migrações do frontend em inglês. Testa o esquema base e as partes 5/6, inclusive pagamento antes do KDS, fidelidade, consentimento e direitos do titular.
 
 `python3 tests/privacy_portal_smoke.py` usa Playwright/Chromium e API simulada para validar token no fragmento, ausência de sessão de funcionário/localStorage, download pessoal, confirmação de exclusão e tamanho móvel. Não conecta ao Supabase real e não envia mensagens nem pagamentos.
+
+## Login touch e KDS tático
+
+`python3 tests/tactical_ui_smoke.py` exercita numpad, limpeza/backspace, feedback de bloqueio, Fast-Pass com sessão Auth simulada, redirecionamentos, ausência de menu admin para funcionários, filtros e cores do KDS. O teste implementa um servidor WebSocket Phoenix simulado para verificar que eventos do Supabase causam uma nova consulta e exibem cartões/contagens sem reload. Também valida a troca de cor pelo relógio e layout móvel. Não é uma homologação do Supabase hospedado.
+
+`supabase/tests/tactical.sql`, executado por `npm run test:db`, cobre PIN único, lockout compartilhado, prova descartável de sessão, bloqueio de promoção de sessão por PIN, carga real das praças, média ponderada e custo capturado da DRE em PostgreSQL descartável.

@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.eco-lgpd]
 verify_jwt = false
+
+[functions.fast-pass]
+verify_jwt = false

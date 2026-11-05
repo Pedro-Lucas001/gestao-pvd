@@ -1,36 +1,37 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  Plus,
+  ArrowRight,
+  Banknote,
+  Check,
+  Clock3,
+  CreditCard,
+  LockKeyhole,
   Minus,
-  Trash2,
+  Plus,
+  RotateCcw,
   Search,
   ShoppingBasket,
-  ArrowRight,
-  LockKeyhole,
-  WifiOff,
-  Check,
-  RotateCcw,
-  Banknote,
   Smartphone,
-  CreditCard,
-  Clock3,
+  Trash2,
+  WifiOff,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import sourceMenu from "../data/menu.json";
 import { useAuth } from "../auth/context";
-import { supabase, rpc } from "../lib/supabase";
+import { rpc, supabase } from "../lib/supabase";
 import {
+  cents,
+  emptyDraft,
   money,
   normalize,
-  cents,
-  toggleModifier,
-  emptyDraft,
   orderPayload,
+  toggleModifier,
 } from "../lib/operations";
 import { useConnection } from "../components/useConnection";
 import { reportError } from "../lib/monitoring";
 import ErrorBoundary from "../components/ErrorBoundary";
 import CashDrawer from "./CashDrawer";
+import DemandPanel from "../kds/DemandPanel";
 const categories = [
   ["all", "Todos"],
   ["hamburgueres", "Hambúrgueres"],
@@ -46,20 +47,19 @@ const previewProducts = sourceMenu.map((p) => ({
   ...p,
   price_cents: p.price,
   image_path: `/menu/${p.category}.svg`,
-  allowed_modifiers:
-    p.category === "hamburgueres"
-      ? [
-          "Sem cebola",
-          "Sem tomate",
-          "Sem alface",
-          "Sem molhos",
-          "Ponto: mal passado",
-          "Ponto: ao ponto",
-          "Ponto: bem passado",
-        ]
-      : p.category === "dogoes"
-        ? ["Sem cebola", "Sem molhos"]
-        : [],
+  allowed_modifiers: p.category === "hamburgueres"
+    ? [
+      "Sem cebola",
+      "Sem tomate",
+      "Sem alface",
+      "Sem molhos",
+      "Ponto: mal passado",
+      "Ponto: ao ponto",
+      "Ponto: bem passado",
+    ]
+    : p.category === "dogoes"
+    ? ["Sem cebola", "Sem molhos"]
+    : [],
 }));
 function restore(user) {
   try {
@@ -76,7 +76,7 @@ export default function PDV({ preview = false }) {
   const [products, setProducts] = useState(preview ? previewProducts : []),
     [catalogError, setCatalogError] = useState("");
   const [draft, setDraft] = useState(() =>
-    restore(preview ? "preview" : profile.id),
+    restore(preview ? "preview" : profile.id)
   );
   const [selected, setSelected] = useState(null),
     [category, setCategory] = useState("all"),
@@ -110,7 +110,7 @@ export default function PDV({ preview = false }) {
         supabase
           .from("products")
           .select(
-            "id,name,category,description,price_cents,image_path,allowed_modifiers",
+            "id,name,category,sector,description,price_cents,image_path,allowed_modifiers",
           )
           .eq("active", true)
           .order("category")
@@ -122,8 +122,9 @@ export default function PDV({ preview = false }) {
           .is("closed_at", null)
           .maybeSingle(),
       ]);
-      if (catalog.error || turns.error)
+      if (catalog.error || turns.error) {
         throw new Error("Não foi possível sincronizar produtos e caixa.");
+      }
       setProducts(catalog.data);
       setShift(turns.data);
     } catch (e) {
@@ -160,12 +161,12 @@ export default function PDV({ preview = false }) {
     const line = found
       ? { ...found, quantity: Math.min(100, found.quantity + 1) }
       : {
-          ...product,
-          lineId: crypto.randomUUID(),
-          quantity: 1,
-          modifiers: [],
-          notes: "",
-        };
+        ...product,
+        lineId: crypto.randomUUID(),
+        quantity: 1,
+        modifiers: [],
+        notes: "",
+      };
     setDraft({
       ...draft,
       items: found
@@ -174,7 +175,7 @@ export default function PDV({ preview = false }) {
     });
     setSelected(line.lineId);
     setError("");
-    if (window.innerWidth <= 740)
+    if (window.innerWidth <= 740) {
       setTimeout(
         () =>
           document
@@ -182,6 +183,7 @@ export default function PDV({ preview = false }) {
             ?.scrollIntoView({ behavior: "smooth", block: "start" }),
         0,
       );
+    }
   }
   function update(lineId, change) {
     if (frozen) return;
@@ -222,11 +224,12 @@ export default function PDV({ preview = false }) {
       if (e.rejected) {
         setDraft((prev) => ({ ...prev, submitted: false }));
         setError(e.message);
-      } else
+      } else {
         setError(
           e.message +
             " O pedido foi preservado: use “Reenviar mesma tentativa”.",
         );
+      }
       reportError(e, "create_order");
     } finally {
       setBusy(false);
@@ -268,8 +271,9 @@ export default function PDV({ preview = false }) {
           try {
             const body = await failure.context.json();
             message = body.error || message;
-            if (failure.context.status === 503)
+            if (failure.context.status === 503) {
               setDraft((prev) => ({ ...prev, payment: null }));
+            }
           } catch {
             /* Preserve attempt when the response cannot be read. */
           }
@@ -291,8 +295,9 @@ export default function PDV({ preview = false }) {
       draft.payment?.status === "confirmed" ||
       draft.order.status === "cancelled" ||
       locked
-    )
+    ) {
       return;
+    }
     let stopped = false;
     const check = async () => {
       const { data } = await supabase
@@ -304,14 +309,15 @@ export default function PDV({ preview = false }) {
         !stopped &&
         data &&
         ["queued", "preparing", "ready", "completed"].includes(data.status)
-      )
+      ) {
         setDraft((prev) => ({
           ...prev,
           order: { ...prev.order, ...data },
           payment: { ...prev.payment, status: "confirmed" },
         }));
-      else if (!stopped && data?.status === "cancelled")
+      } else if (!stopped && data?.status === "cancelled") {
         setDraft((prev) => ({ ...prev, order: { ...prev.order, ...data } }));
+      }
     };
     const timer = setInterval(check, 4000);
     return () => {
@@ -337,8 +343,9 @@ export default function PDV({ preview = false }) {
       !confirm(
         "Abrir este pedido? O rascunho atual será substituído. Pedidos já enviados permanecem no banco.",
       )
-    )
+    ) {
       return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -354,8 +361,9 @@ export default function PDV({ preview = false }) {
           .eq("status", "pending")
           .maybeSingle(),
       ]);
-      if (lines.error || attempts.error)
+      if (lines.error || attempts.error) {
         throw new Error("Não foi possível retomar o pedido.");
+      }
       const payment = attempts.data
         ? { method: attempts.data.method, key: attempts.data.id }
         : null;
@@ -374,8 +382,9 @@ export default function PDV({ preview = false }) {
           modifiers: i.modifiers,
           notes: i.notes,
           lineId: crypto.randomUUID(),
-          allowed_modifiers:
-            products.find((p) => p.id === i.product_id)?.allowed_modifiers ||
+          allowed_modifiers: products.find((p) =>
+            p.id === i.product_id
+          )?.allowed_modifiers ||
             [],
         })),
         payment,
@@ -429,7 +438,7 @@ export default function PDV({ preview = false }) {
       setBusy(false);
     }
   }
-  if (!preview && locked)
+  if (!preview && locked) {
     return (
       <section className="terminal-lock">
         <LockKeyhole size={34} />
@@ -483,41 +492,46 @@ export default function PDV({ preview = false }) {
         </small>
       </section>
     );
-  if (!preview && (loadingShift || (!shift && !catalogError)))
-    return loadingShift ? (
-      <div className="loading">Sincronizando caixa…</div>
-    ) : (
-      <section className="terminal-lock">
-        <Banknote size={35} />
-        <span className="eyebrow">COMEÇAR O TURNO</span>
-        <h1>Vamos abrir seu caixa?</h1>
-        <p>
-          Informe o fundo de troco. Esse valor não altera o preço dos pedidos.
-        </p>
-        <form onSubmit={shiftAction}>
-          <label>
-            Fundo de troco (R$)
-            <input
-              inputMode="decimal"
-              required
-              value={shiftValue}
-              onChange={(e) => setShiftValue(e.target.value)}
-            />
-          </label>
-          {error && (
-            <p role="alert" className="error-message">
-              {error}
-            </p>
-          )}
-          <button className="primary full" disabled={!online || busy}>
-            Abrir meu caixa
-            <ArrowRight size={17} />
-          </button>
-        </form>
-      </section>
-    );
+  }
+  if (!preview && (loadingShift || (!shift && !catalogError))) {
+    return loadingShift
+      ? <div className="loading">Sincronizando caixa…</div>
+      : (
+        <section className="terminal-lock">
+          <Banknote size={35} />
+          <span className="eyebrow">COMEÇAR O TURNO</span>
+          <h1>Vamos abrir seu caixa?</h1>
+          <p>
+            Informe o fundo de troco. Esse valor não altera o preço dos pedidos.
+          </p>
+          <form onSubmit={shiftAction}>
+            <label>
+              Fundo de troco (R$)
+              <input
+                inputMode="decimal"
+                required
+                value={shiftValue}
+                onChange={(e) => setShiftValue(e.target.value)}
+              />
+            </label>
+            {error && (
+              <p role="alert" className="error-message">
+                {error}
+              </p>
+            )}
+            <button className="primary full" disabled={!online || busy}>
+              Abrir meu caixa
+              <ArrowRight size={17} />
+            </button>
+          </form>
+        </section>
+      );
+  }
   return (
     <>
+      {!preview && (
+        <DemandPanel compact items={draft.items} products={products} />
+      )}
       <div className="pdv-heading">
         <div>
           <span className="eyebrow">ATENDIMENTO ÁGIL · PLANETA LANCHES</span>
@@ -528,9 +542,8 @@ export default function PDV({ preview = false }) {
         </div>
         <div className="shift-indicator">
           <span className="live-dot" />
-          {preview
-            ? "Prévia visual"
-            : `Caixa de ${profile.name.split(" ")[0]}`}{" "}
+          {preview ? "Prévia visual" : `Caixa de ${profile.name.split(" ")[0]}`}
+          {" "}
           {!preview && (
             <button
               className="text-button"
@@ -564,7 +577,8 @@ export default function PDV({ preview = false }) {
               minLength={5}
               maxLength={500}
               value={closingReason}
-              onChange={(e) => setClosingReason(e.target.value)}
+              onChange={(e) =>
+                setClosingReason(e.target.value)}
             />
           </label>
           <button
@@ -635,7 +649,10 @@ export default function PDV({ preview = false }) {
                 onChange={(e) => setQuery(e.target.value)}
               />
               {query && (
-                <button aria-label="Limpar busca" onClick={() => setQuery("")}>
+                <button
+                  aria-label="Limpar busca"
+                  onClick={() => setQuery("")}
+                >
                   <Trash2 size={14} />
                 </button>
               )}
@@ -723,8 +740,7 @@ export default function PDV({ preview = false }) {
             onClick={() =>
               document
                 .getElementById("catalogo")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })}
           >
             ← Voltar ao cardápio
           </button>
@@ -749,8 +765,7 @@ export default function PDV({ preview = false }) {
                 maxLength={100}
                 value={draft.customer}
                 onChange={(e) =>
-                  setDraft({ ...draft, customer: e.target.value })
-                }
+                  setDraft({ ...draft, customer: e.target.value })}
               />
             </label>
             <label>
@@ -759,8 +774,7 @@ export default function PDV({ preview = false }) {
                 disabled={frozen}
                 value={draft.channel}
                 onChange={(e) =>
-                  setDraft({ ...draft, channel: e.target.value })
-                }
+                  setDraft({ ...draft, channel: e.target.value })}
               >
                 <option value="counter">Balcão</option>
                 <option value="whatsapp">WhatsApp · manual</option>
@@ -781,7 +795,9 @@ export default function PDV({ preview = false }) {
             )}
             {draft.items.map((item) => (
               <article
-                className={`cart-line ${selected === item.lineId ? "selected" : ""}`}
+                className={`cart-line ${
+                  selected === item.lineId ? "selected" : ""
+                }`}
                 key={item.lineId}
               >
                 <div className="cart-line-top">
@@ -789,8 +805,9 @@ export default function PDV({ preview = false }) {
                     className="item-name"
                     aria-expanded={selected === item.lineId}
                     onClick={() =>
-                      setSelected(selected === item.lineId ? null : item.lineId)
-                    }
+                      setSelected(
+                        selected === item.lineId ? null : item.lineId,
+                      )}
                   >
                     <strong>{item.name}</strong>
                     <small>
@@ -807,8 +824,7 @@ export default function PDV({ preview = false }) {
                       aria-label={`Diminuir ${item.name}`}
                       disabled={frozen}
                       onClick={() =>
-                        update(item.lineId, { quantity: item.quantity - 1 })
-                      }
+                        update(item.lineId, { quantity: item.quantity - 1 })}
                     >
                       <Minus size={12} />
                     </button>
@@ -817,8 +833,7 @@ export default function PDV({ preview = false }) {
                       aria-label={`Aumentar ${item.name}`}
                       disabled={frozen || item.quantity >= 100}
                       onClick={() =>
-                        update(item.lineId, { quantity: item.quantity + 1 })
-                      }
+                        update(item.lineId, { quantity: item.quantity + 1 })}
                     >
                       <Plus size={12} />
                     </button>
@@ -841,16 +856,16 @@ export default function PDV({ preview = false }) {
                           <button
                             key={m}
                             disabled={frozen}
-                            className={
-                              item.modifiers.includes(m) ? "active" : ""
-                            }
+                            className={item.modifiers.includes(m)
+                              ? "active"
+                              : ""}
                             onClick={() =>
                               update(item.lineId, {
                                 modifiers: toggleModifier(item.modifiers, m),
-                              })
-                            }
+                              })}
                           >
-                            {item.modifiers.includes(m) && <Check size={11} />}{" "}
+                            {item.modifiers.includes(m) && <Check size={11} />}
+                            {" "}
                             {m}
                           </button>
                         ))}
@@ -862,8 +877,7 @@ export default function PDV({ preview = false }) {
                         maxLength={500}
                         disabled={frozen}
                         onChange={(e) =>
-                          update(item.lineId, { notes: e.target.value })
-                        }
+                          update(item.lineId, { notes: e.target.value })}
                       />
                     </div>
                   </ErrorBoundary>
@@ -880,117 +894,126 @@ export default function PDV({ preview = false }) {
               </span>
               <strong>{money(total)}</strong>
             </div>
-            {draft.order?.status === "cancelled" ? (
-              <div className="error-message">
-                <h3>Pedido cancelado.</h3>
-                <p>Este pedido não está disponível para pagamento.</p>
-                <button className="secondary" onClick={reset}>
-                  Novo pedido
-                </button>
-              </div>
-            ) : draft.payment?.status === "confirmed" ? (
-              <div className="payment-success" role="status">
-                <Check size={23} />
-                <h3>Pagamento confirmado.</h3>
-                <p>Pedido liberado para os setores da cozinha.</p>
-                <button className="primary full" onClick={reset}>
-                  Começar próximo pedido
-                  <Plus size={16} />
-                </button>
-              </div>
-            ) : draft.order ? (
-              <>
-                <div className="payment-options">
-                  {[
-                    ["cash", "Dinheiro", Banknote],
-                    ["pix", "Pix", Smartphone],
-                    ["tef", "Cartão", CreditCard],
-                  ].map(([id, label, Icon]) => (
-                    <button
-                      key={id}
-                      disabled={busy || Boolean(draft.payment)}
-                      className={method === id ? "active" : ""}
-                      onClick={() => setMethod(id)}
-                    >
-                      <Icon size={17} />
-                      {label}
-                    </button>
-                  ))}
+            {draft.order?.status === "cancelled"
+              ? (
+                <div className="error-message">
+                  <h3>Pedido cancelado.</h3>
+                  <p>Este pedido não está disponível para pagamento.</p>
+                  <button className="secondary" onClick={reset}>
+                    Novo pedido
+                  </button>
                 </div>
-                {method !== "cash" && (
-                  <p className="payment-disclaimer">
-                    Pix Nubank de conta física: confirmação manual do
-                    administrador. TEF exige serviço homologado.
-                  </p>
-                )}
-                {paymentIntent?.pix && (
-                  <div className="pix-code">
-                    <QRCodeSVG value={paymentIntent.pix.copyPaste} size={150} />
-                    <p>
-                      {paymentIntent.pix.expiresAt
-                        ? `Válido até ${new Date(paymentIntent.pix.expiresAt).toLocaleTimeString("pt-BR")}`
-                        : "QR Pix estático, sem expiração automática. Aguarde a conferência do crédito pelo administrador."}
-                    </p>
-                    <button
-                      className="secondary"
-                      onClick={() =>
-                        navigator.clipboard.writeText(
-                          paymentIntent.pix.copyPaste,
-                        )
-                      }
-                    >
-                      Copiar código Pix
-                    </button>
-                    <code>{paymentIntent.pix.copyPaste}</code>
+              )
+              : draft.payment?.status === "confirmed"
+              ? (
+                <div className="payment-success" role="status">
+                  <Check size={23} />
+                  <h3>Pagamento confirmado.</h3>
+                  <p>Pedido liberado para os setores da cozinha.</p>
+                  <button className="primary full" onClick={reset}>
+                    Começar próximo pedido
+                    <Plus size={16} />
+                  </button>
+                </div>
+              )
+              : draft.order
+              ? (
+                <>
+                  <div className="payment-options">
+                    {[
+                      ["cash", "Dinheiro", Banknote],
+                      ["pix", "Pix", Smartphone],
+                      ["tef", "Cartão", CreditCard],
+                    ].map(([id, label, Icon]) => (
+                      <button
+                        key={id}
+                        disabled={busy || Boolean(draft.payment)}
+                        className={method === id ? "active" : ""}
+                        onClick={() => setMethod(id)}
+                      >
+                        <Icon size={17} />
+                        {label}
+                      </button>
+                    ))}
                   </div>
-                )}
-                <button
-                  className="primary full"
-                  disabled={!online || busy || preview}
-                  onClick={pay}
-                >
-                  {busy
-                    ? "Processando…"
-                    : draft.payment
+                  {method !== "cash" && (
+                    <p className="payment-disclaimer">
+                      Pix Nubank de conta física: confirmação manual do
+                      administrador. TEF exige serviço homologado.
+                    </p>
+                  )}
+                  {paymentIntent?.pix && (
+                    <div className="pix-code">
+                      <QRCodeSVG
+                        value={paymentIntent.pix.copyPaste}
+                        size={150}
+                      />
+                      <p>
+                        {paymentIntent.pix.expiresAt
+                          ? `Válido até ${
+                            new Date(paymentIntent.pix.expiresAt)
+                              .toLocaleTimeString("pt-BR")
+                          }`
+                          : "QR Pix estático, sem expiração automática. Aguarde a conferência do crédito pelo administrador."}
+                      </p>
+                      <button
+                        className="secondary"
+                        onClick={() =>
+                          navigator.clipboard.writeText(
+                            paymentIntent.pix.copyPaste,
+                          )}
+                      >
+                        Copiar código Pix
+                      </button>
+                      <code>{paymentIntent.pix.copyPaste}</code>
+                    </div>
+                  )}
+                  <button
+                    className="primary full"
+                    disabled={!online || busy || preview}
+                    onClick={pay}
+                  >
+                    {busy
+                      ? "Processando…"
+                      : draft.payment
                       ? "Retomar mesma tentativa"
                       : method === "cash"
-                        ? "Confirmar recebimento em dinheiro"
-                        : method === "pix"
-                          ? "Gerar Pix com valor do pedido"
-                          : "Iniciar TEF"}
-                  <ArrowRight size={17} />
-                </button>
-                <p className="field-note">
-                  <LockKeyhole size={12} />A cozinha só recebe após a
-                  confirmação válida.
-                </p>
-              </>
-            ) : (
-              <>
-                <button
-                  className="primary full"
-                  onClick={send}
-                  disabled={!draft.items.length || busy || !online || preview}
-                >
-                  {busy
-                    ? "Enviando…"
-                    : draft.submitted
+                      ? "Confirmar recebimento em dinheiro"
+                      : method === "pix"
+                      ? "Gerar Pix com valor do pedido"
+                      : "Iniciar TEF"}
+                    <ArrowRight size={17} />
+                  </button>
+                  <p className="field-note">
+                    <LockKeyhole size={12} />A cozinha só recebe após a
+                    confirmação válida.
+                  </p>
+                </>
+              )
+              : (
+                <>
+                  <button
+                    className="primary full"
+                    onClick={send}
+                    disabled={!draft.items.length || busy || !online || preview}
+                  >
+                    {busy
+                      ? "Enviando…"
+                      : draft.submitted
                       ? "Reenviar mesma tentativa"
                       : "Ir para pagamento"}
-                  {draft.submitted ? (
-                    <RotateCcw size={17} />
-                  ) : (
-                    <ArrowRight size={17} />
-                  )}
-                </button>
-                <p className="field-note">
-                  <Clock3 size={12} />
-                  {preview
-                    ? "Prévia sem banco. Pagamentos e envios desativados."
-                    : "O banco valida produtos, quantidades e preços."}
-                </p>
-              </>
-            )}
+                    {draft.submitted
+                      ? <RotateCcw size={17} />
+                      : <ArrowRight size={17} />}
+                  </button>
+                  <p className="field-note">
+                    <Clock3 size={12} />
+                    {preview
+                      ? "Prévia sem banco. Pagamentos e envios desativados."
+                      : "O banco valida produtos, quantidades e preços."}
+                  </p>
+                </>
+              )}
             {draft.order?.status === "pending_payment" && !draft.payment && (
               <button
                 className="clear-cart"
@@ -1021,15 +1044,14 @@ export default function PDV({ preview = false }) {
       </div>
       <button
         className="mobile-order-shortcut"
-        onClick={() =>
-          document
-            .getElementById("pedido-atual")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" })
-        }
+        onClick={() => document
+          .getElementById("pedido-atual")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" })}
       >
         <ShoppingBasket size={17} />
         <span>
-          Ver pedido · {draft.items.reduce((sum, i) => sum + i.quantity, 0)}{" "}
+          Ver pedido · {draft.items.reduce((sum, i) => sum + i.quantity, 0)}
+          {" "}
           itens
         </span>
         <strong>{money(total)}</strong>

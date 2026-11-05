@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { rpc } from "../lib/supabase";
+import DemandPanel from "../kds/DemandPanel";
 import { money } from "../lib/operations";
 export default function Reports() {
   const today = new Intl.DateTimeFormat("en-CA", {
@@ -43,6 +44,7 @@ export default function Reports() {
     <section className="management">
       <span className="eyebrow">INTELIGÊNCIA DA OPERAÇÃO</span>
       <h1>Resultados do seu Planeta.</h1>
+      <DemandPanel compact />
       <form className="filter-row" onSubmit={load}>
         <label>
           De

@@ -24,17 +24,16 @@ Deno.serve(async (req: Request) => {
     error,
   } = await db.auth.getUser();
   if (error || !user) return reply({ error: "AUTH_REQUIRED" }, 401);
-  const { data } = await db
-    .from("profiles")
-    .select("role,active")
-    .eq("id", user.id)
-    .single();
-  if (!data?.active || data.role !== "admin")
+  const { data, error: profileError } = await db.rpc("operator_context");
+  if (
+    profileError || !data?.active || data.role !== "admin" ||
+    data.requires_password
+  ) {
     return reply({ error: "ADMIN_REQUIRED" }, 403);
+  }
   const has = (key: string) => Boolean(Deno.env.get(key));
   return reply({
-    pixConfigured:
-      Deno.env.get("PAYMENT_MODE") === "manual_pix" &&
+    pixConfigured: Deno.env.get("PAYMENT_MODE") === "manual_pix" &&
       ["PIX_KEY", "PIX_MERCHANT_NAME", "PIX_MERCHANT_CITY"].every(has),
     whatsappConfigured: [
       "WHATSAPP_APP_SECRET",
