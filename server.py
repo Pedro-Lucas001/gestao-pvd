@@ -43,7 +43,7 @@ def public_user(row):
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(ROOT / 'public'), **kwargs)
+        super().__init__(*args, directory=str(ROOT / 'dist'), **kwargs)
 
     def reply(self, code, value, cookie=None):
         data = json.dumps(value, ensure_ascii=False).encode()
@@ -210,6 +210,8 @@ class Handler(SimpleHTTPRequestHandler):
         db.execute('INSERT INTO users(name,username,password,role) VALUES(?,?,?,?)', (name, username, password_hash(password), role))
 
 if __name__ == '__main__':
+    if not (ROOT / 'dist' / 'index.html').is_file():
+        raise SystemExit('Frontend não compilado. Execute npm ci e npm run build antes de iniciar o servidor.')
     init_db()
     server = ThreadingHTTPServer((os.environ.get('HOST', '127.0.0.1'), int(os.environ.get('PORT', '3000'))), Handler)
     server.attempts = {}

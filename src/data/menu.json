@@ -1,0 +1,331 @@
+[
+  {
+    "id": "simples",
+    "category": "hamburgueres",
+    "name": "Simples",
+    "price": 700,
+    "description": "Pão e carne de hambúrguer. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "cheese-burguer",
+    "category": "hamburgueres",
+    "name": "Cheese Burguer",
+    "price": 800,
+    "description": "Pão, carne de hambúrguer e queijo. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "x-burguer",
+    "category": "hamburgueres",
+    "name": "X-Burguer",
+    "price": 900,
+    "description": "Pão, carne de hambúrguer, presunto, queijo e ovo. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "x-calabresa",
+    "category": "hamburgueres",
+    "name": "X-Calabresa",
+    "price": 1200,
+    "description": "Pão, carne de hambúrguer, calabresa e queijo. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "x-bacon",
+    "category": "hamburgueres",
+    "name": "X-Bacon",
+    "price": 1300,
+    "description": "Pão, carne de hambúrguer, bacon e queijo. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "x-egg-bacon",
+    "category": "hamburgueres",
+    "name": "X-Egg Bacon",
+    "price": 1500,
+    "description": "Pão, carne de hambúrguer, queijo, ovo e bacon. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "x-tudo",
+    "category": "hamburgueres",
+    "name": "X-Tudo",
+    "price": 1700,
+    "description": "Pão, carne de hambúrguer, salsicha, calabresa, bacon, ovo, queijo e presunto. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "dogao",
+    "category": "dogoes",
+    "name": "Dogão na chapa",
+    "price": 600,
+    "description": "Pão, salsicha, presunto e queijo. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "dogao-calabresa",
+    "category": "dogoes",
+    "name": "Dogão com calabresa",
+    "price": 800,
+    "description": "Dogão com calabresa. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "dogao-bacon",
+    "category": "dogoes",
+    "name": "Dogão com bacon",
+    "price": 900,
+    "description": "Dogão com bacon. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "dogao-duplo",
+    "category": "dogoes",
+    "name": "Dogão duplo",
+    "price": 1200,
+    "description": "Pão, 2 salsichas, 2 presuntos e 2 queijos. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "x-dogao",
+    "category": "dogoes",
+    "name": "X-Dogão especial",
+    "price": 1500,
+    "description": "Pão, salsicha, presunto, queijo, calabresa e bacon. Alface, tomate, cebola caramelizada, milho, batata palha e molhos da casa."
+  },
+  {
+    "id": "batata",
+    "category": "porcoes",
+    "name": "Batata frita",
+    "price": 800,
+    "description": "Porção conforme o cardápio da casa."
+  },
+  {
+    "id": "batata-calabresa",
+    "category": "porcoes",
+    "name": "Batata com calabresa",
+    "price": 1200,
+    "description": "Porção conforme o cardápio da casa."
+  },
+  {
+    "id": "batata-bacon",
+    "category": "porcoes",
+    "name": "Batata com bacon",
+    "price": 1200,
+    "description": "Porção conforme o cardápio da casa."
+  },
+  {
+    "id": "pastel-frango",
+    "category": "pasteis",
+    "name": "Frango com queijo",
+    "price": 800,
+    "description": "Pastel preparado na hora."
+  },
+  {
+    "id": "pastel-calabresa",
+    "category": "pasteis",
+    "name": "Queijo com calabresa",
+    "price": 800,
+    "description": "Pastel preparado na hora."
+  },
+  {
+    "id": "pastel-misto",
+    "category": "pasteis",
+    "name": "Misto",
+    "price": 800,
+    "description": "Pastel preparado na hora."
+  },
+  {
+    "id": "coxinhas-5",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 5 unidades",
+    "price": 100,
+    "description": "Porção com 5 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-10",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 10 unidades",
+    "price": 200,
+    "description": "Porção com 10 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-15",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 15 unidades",
+    "price": 300,
+    "description": "Porção com 15 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-20",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 20 unidades",
+    "price": 400,
+    "description": "Porção com 20 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-25",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 25 unidades",
+    "price": 500,
+    "description": "Porção com 25 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-35",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 35 unidades",
+    "price": 700,
+    "description": "Porção com 35 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-50",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 50 unidades",
+    "price": 1000,
+    "description": "Porção com 50 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-75",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 75 unidades",
+    "price": 1500,
+    "description": "Porção com 75 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-100",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 100 unidades",
+    "price": 2000,
+    "description": "Porção com 100 mini coxinhas."
+  },
+  {
+    "id": "coxinhas-125",
+    "category": "coxinhas",
+    "name": "Mini coxinhas · 125 unidades",
+    "price": 2500,
+    "description": "Porção com 125 mini coxinhas."
+  },
+  {
+    "id": "refri-lata",
+    "category": "bebidas",
+    "name": "Refrigerante lata",
+    "price": 500,
+    "description": ""
+  },
+  {
+    "id": "coca-lata",
+    "category": "bebidas",
+    "name": "Coca-Cola lata",
+    "price": 600,
+    "description": ""
+  },
+  {
+    "id": "refri-1l",
+    "category": "bebidas",
+    "name": "Refrigerante 1 L",
+    "price": 800,
+    "description": ""
+  },
+  {
+    "id": "coca-1l",
+    "category": "bebidas",
+    "name": "Coca-Cola 1 L",
+    "price": 1000,
+    "description": ""
+  },
+  {
+    "id": "del-valle",
+    "category": "bebidas",
+    "name": "Del Valle",
+    "price": 500,
+    "description": ""
+  },
+  {
+    "id": "polpa",
+    "category": "bebidas",
+    "name": "Suco de polpa",
+    "price": 200,
+    "description": ""
+  },
+  {
+    "id": "agua",
+    "category": "bebidas",
+    "name": "Água",
+    "price": 200,
+    "description": ""
+  },
+  {
+    "id": "pet-2",
+    "category": "bebidas",
+    "name": "Santa Joana 200 ml",
+    "price": 200,
+    "description": "Refrigerante Santa Joana, garrafa de 200 ml."
+  },
+  {
+    "id": "pet-3",
+    "category": "bebidas",
+    "name": "Antarctica 200 ml",
+    "price": 300,
+    "description": "Refrigerante Antarctica, garrafa de 200 ml."
+  },
+  {
+    "id": "h2o",
+    "category": "bebidas",
+    "name": "H2O",
+    "price": 600,
+    "description": ""
+  },
+  {
+    "id": "agua-gas",
+    "category": "bebidas",
+    "name": "Água com gás",
+    "price": 300,
+    "description": ""
+  },
+  {
+    "id": "santa-joana",
+    "category": "bebidas",
+    "name": "Santa Joana 2 L",
+    "price": 800,
+    "description": ""
+  },
+  {
+    "id": "extra-carne",
+    "category": "adicionais",
+    "name": "Carne de hambúrguer",
+    "price": 200,
+    "description": "Adicional para o seu lanche."
+  },
+  {
+    "id": "extra-salsicha",
+    "category": "adicionais",
+    "name": "Salsicha",
+    "price": 200,
+    "description": "Adicional para o seu lanche."
+  },
+  {
+    "id": "extra-presunto",
+    "category": "adicionais",
+    "name": "Presunto",
+    "price": 100,
+    "description": "Adicional para o seu lanche."
+  },
+  {
+    "id": "extra-queijo",
+    "category": "adicionais",
+    "name": "Queijo",
+    "price": 100,
+    "description": "Adicional para o seu lanche."
+  },
+  {
+    "id": "extra-ovo",
+    "category": "adicionais",
+    "name": "Ovo",
+    "price": 100,
+    "description": "Adicional para o seu lanche."
+  },
+  {
+    "id": "extra-calabresa",
+    "category": "adicionais",
+    "name": "Calabresa",
+    "price": 300,
+    "description": "Adicional para o seu lanche."
+  },
+  {
+    "id": "extra-bacon",
+    "category": "adicionais",
+    "name": "Bacon",
+    "price": 300,
+    "description": "Adicional para o seu lanche."
+  }
+]

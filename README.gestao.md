@@ -4,10 +4,13 @@ Painel web responsivo para organizar o atendimento e a cozinha, com login indivi
 
 ## Executar
 
-Requer Python 3.10 ou superior. Não há pacotes externos para instalar.
+Requer Python 3.10 ou superior. O backend usa apenas a biblioteca padrão; o frontend requer Node.js e as dependências do package-lock.json.
+
+Na raiz do repositório:
 
 ```bash
-cd /workspace/gestao-pvd
+npm ci
+npm run build
 python3 server.py
 ```
 
@@ -36,15 +39,16 @@ O primeiro administrador é cadastrado uma única vez. Funcionários são cadast
 3. O administrador confere o recebimento fora do sistema e confirma manualmente.
 4. A equipe avança por **Na fila → Em preparo → Pronto → Concluído**.
 
-Os preços são informados por item; os totais são calculados no servidor em centavos. O painel atualiza a cada 15 segundos. Pedidos cancelados não são apagados. Cancelamento não efetua estorno.
+Os preços vêm do catálogo por item; os totais são calculados no servidor em centavos. O painel atualiza a cada 15 segundos. Pedidos cancelados não são apagados. Cancelamento não efetua estorno.
 
-**Ainda não implementado:** confirmação automática Pix, recebimento de mensagens WhatsApp, impressão automática, cardápio, estoque, relatórios financeiros completos e recuperação de senha. O canal WhatsApp apenas identifica pedidos digitados pela equipe. Nenhuma integração é simulada como se estivesse conectada.
+**Ainda não implementado:** confirmação automática Pix, recebimento de mensagens WhatsApp, impressão automática, estoque, relatórios financeiros completos e recuperação de senha. O canal WhatsApp apenas identifica pedidos digitados pela equipe. Nenhuma integração é simulada como se estivesse conectada.
 
 ## Validar
 
 ```bash
 python3 -m unittest discover -s tests -v
-node --check public/app.js
+npm run lint
+npm run build
 ```
 
 Os testes iniciam um servidor real com banco temporário e verificam permissões, bloqueio de acesso, proteção CSRF, validação, cálculo de total, bloqueio antes do pagamento e o ciclo de preparo. Não alteram o banco da aplicação.
