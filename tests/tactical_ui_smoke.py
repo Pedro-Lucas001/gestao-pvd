@@ -149,9 +149,17 @@ try:
         page.get_by_role('link', name='Cozinha · KDS').click()
         expect(page.get_by_text('Realtime conectado', exact=True)).to_be_visible()
         expect(page.locator('.kds-card')).to_have_count(3)
-        expect(page.locator('[data-ticket="grill-1"]')).to_have_class('kds-card normal')
-        expect(page.locator('[data-ticket="bar-1"]')).to_have_class('kds-card warning')
-        expect(page.locator('[data-ticket="fryer-1"]')).to_have_class('kds-card critical')
+        expect(page.locator('[data-ticket="grill-1"]')).to_have_attribute('data-urgency','normal')
+        expect(page.locator('[data-ticket="bar-1"]')).to_have_attribute('data-urgency','warning')
+        expect(page.locator('[data-ticket="fryer-1"]')).to_have_attribute('data-urgency','critical')
+        for key in ['grill-1','bar-1','fryer-1']:
+            card = page.locator(f'[data-ticket="{key}"]')
+            assert card.evaluate('(el) => getComputedStyle(el).backgroundColor') == 'rgb(45, 45, 45)'
+            assert card.evaluate('(el) => getComputedStyle(el).borderLeftWidth') == '4px'
+            assert card.evaluate('(el) => getComputedStyle(el).borderTopWidth') == '1px'
+            assert card.evaluate('(el) => getComputedStyle(el).borderRadius') == '12px'
+        colors = [page.locator(f'[data-ticket="{key}"]').evaluate('(el) => getComputedStyle(el).borderLeftColor') for key in ['grill-1','bar-1','fryer-1']]
+        assert len(set(colors)) == 3, 'As três urgências precisam de bordas distintas'
         expect(page.locator('[data-station="grill"]')).to_contain_text('Alta demanda')
         page.get_by_role('tab', name='Bebidas').click()
         expect(page.locator('.kds-card')).to_have_count(1)
@@ -166,9 +174,9 @@ try:
         realtime.emit('kitchen_tickets')
         expect(page.locator('[data-ticket="grill-2"]')).to_be_visible(timeout=3000)
         assert state['ticket_queries'] > queries
-        expect(page.locator('[data-ticket="grill-2"]')).to_have_class('kds-card normal')
+        expect(page.locator('[data-ticket="grill-2"]')).to_have_attribute('data-urgency','normal')
         page.clock.fast_forward(6000)
-        expect(page.locator('[data-ticket="grill-2"]')).to_have_class('kds-card warning')
+        expect(page.locator('[data-ticket="grill-2"]')).to_have_attribute('data-urgency','warning')
         realtime.emit('kitchen_station_load')
         expect(page.locator('[data-station="grill"] .station-load-count > strong')).to_have_text('20')
         page.evaluate('window.scrollTo(0,0)')

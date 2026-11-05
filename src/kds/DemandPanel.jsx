@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   Clock3,
   CookingPot,
   CupSoda,
@@ -9,7 +10,13 @@ import { estimateOrderPreparation, STATIONS } from "./demand";
 import { useKitchenDemand } from "./useKitchenDemand";
 const icons = { flame: Flame, cooking: CookingPot, cup: CupSoda };
 export function DemandSummary(
-  { demand, compact = false, items = [], products = [] },
+  {
+    demand,
+    compact = false,
+    items = [],
+    products = [],
+    presentation = "cards",
+  },
 ) {
   if (demand.loading) {
     return (
@@ -31,6 +38,45 @@ export function DemandSummary(
     items,
     products,
   );
+  if (presentation === "inline") {
+    return (
+      <section
+        className="pl:mb-5 pl:rounded-xl pl:border pl:border-gray-700 pl:bg-[#2d2d2d] pl:p-3"
+        aria-label="Previsão da cozinha"
+      >
+        <div className="pl:flex pl:flex-wrap pl:items-center pl:justify-between pl:gap-2 pl:text-xs">
+          <span className="pl:flex pl:items-center pl:gap-2 pl:font-semibold pl:text-gray-300">
+            <Flame size={16} className="pl:text-[#ff5722]" />
+            {high.length
+              ? `Alta demanda em ${
+                high.map((station) =>
+                  STATIONS.find((s) => s.id === station.sector)?.label
+                ).join(" e ")
+              }`
+              : "Cozinha · fluxo normal"}
+          </span>
+          <span className="pl:text-gray-400">Estimativa de produção</span>
+        </div>
+        {orderMinutes !== null && (
+          <p
+            className="draft-preparation pl:mt-2 pl:flex pl:items-center pl:gap-2 pl:rounded-lg pl:border-0 pl:bg-[#1a1a1a] pl:p-3 pl:text-sm pl:font-semibold pl:text-white"
+            role="status"
+          >
+            <Clock3
+              size={17}
+              className="pl:shrink-0 pl:text-[#ff5722]"
+            />Produção deste pedido: aproximadamente {orderMinutes} min
+          </p>
+        )}
+        <details className="pl:mt-2">
+          <summary className="pl:flex pl:min-h-11 pl:cursor-pointer pl:items-center pl:gap-2 pl:text-xs pl:text-gray-400">
+            <ChevronDown size={15} />Ver carga por praça e critérios da previsão
+          </summary>
+          <DemandSummary demand={demand} compact={compact} />
+        </details>
+      </section>
+    );
+  }
   return (
     <section
       className={`demand-panel ${compact ? "compact" : ""}`}
@@ -141,7 +187,7 @@ export function DemandSummary(
   );
 }
 export default function DemandPanel(
-  { compact = false, items = [], products = [] },
+  { compact = false, items = [], products = [], presentation = "cards" },
 ) {
   const demand = useKitchenDemand();
   return (
@@ -150,6 +196,7 @@ export default function DemandPanel(
       compact={compact}
       items={items}
       products={products}
+      presentation={presentation}
     />
   );
 }

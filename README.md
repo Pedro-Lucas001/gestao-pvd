@@ -61,3 +61,5 @@ Os 47 produtos do cardápio estão no seed; novas alterações usam o banco. Nã
 O histórico Python/SQLite foi preservado, mas não é o backend desta versão. Dados antigos não foram apagados nem migrados automaticamente. Nenhuma conta bancária, conta Meta, projeto Supabase ou implantação hospedada foi criada/ativada por estes comandos.
 
 O login touch/KDS tático requer as incrementais 012–014 e deploy da função `fast-pass`. O painel de demanda usa referências iniciais claramente identificadas até haver amostras reais; configure a capacidade do turno no KDS do admin. [Ativação detalhada](docs/activation.md#6-login-touch-fast-pass-e-kds-tático).
+
+O PDV e o KDS seguem o [design system oficial fornecido pela loja](docs/design-system.md): fundo `#1a1a1a`, cards `#2d2d2d`, laranja `#ff5722` e Tailwind isolado por prefixo. O KDS sinaliza urgência pela borda esquerda, mantendo a mesma superfície dos painéis.

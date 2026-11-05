@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  CheckCheck,
   ChefHat,
-  Clock3,
   CookingPot,
   CupSoda,
   Flame,
@@ -18,12 +16,9 @@ import { STATIONS, ticketUnits } from "./demand";
 import { useKitchenDemand } from "./useKitchenDemand";
 import { DemandSummary } from "./DemandPanel";
 import StationSettings from "./StationSettings";
+import OperationalBrand from "../design/OperationalBrand";
+import OrderTicketCard from "./OrderTicketCard";
 const icons = { grill: Flame, fryer: CookingPot, bar: CupSoda };
-const urgencyNames = {
-  normal: "No prazo",
-  warning: "Atenção ao tempo",
-  critical: "Acima de 20 min",
-};
 export default function KDS() {
   const { profile } = useAuth();
   const online = useConnection(), demand = useKitchenDemand();
@@ -115,18 +110,9 @@ export default function KDS() {
     selected === "all" || ticket.sector === selected
   );
   return (
-    <section className="kds-page">
-      <div className="pdv-heading">
-        <div>
-          <span className="eyebrow">COZINHA · OPERAÇÃO EM TEMPO REAL</span>
-          <h1>
-            Cada praça no seu ritmo<span className="heading-dot">.</span>
-          </h1>
-          <p>
-            O pedido certo, na praça certa. Do primeiro preparo à última
-            entrega.
-          </p>
-        </div>
+    <section className="pl-kds pl:min-h-screen pl:min-w-0 pl:bg-[#1a1a1a] pl:font-sans pl:text-gray-100">
+      <div className="pdv-heading pl:flex pl:flex-wrap pl:items-center pl:justify-between pl:gap-4">
+        <OperationalBrand title="Cozinha · KDS" />
         <span className={`connection-state ${connection}`}>
           <span className="live-dot" />
           {connection === "connected"
@@ -138,9 +124,9 @@ export default function KDS() {
       {profile.role === "admin" && demand.stations.length > 0 && (
         <StationSettings stations={demand.stations} />
       )}
-      <div className="kds-toolbar">
+      <div className="kds-toolbar pl:rounded-xl pl:bg-[#2d2d2d] pl:px-4 pl:py-4">
         <div
-          className="station-tabs"
+          className="station-tabs pl:flex pl:flex-nowrap pl:gap-3 pl:overflow-x-auto pl:pb-2"
           role="tablist"
           aria-label="Filtrar pedidos por praça"
         >
@@ -148,7 +134,11 @@ export default function KDS() {
             <button
               role="tab"
               aria-selected={selected === "all"}
-              className={selected === "all" ? "active" : ""}
+              className={`pl:flex pl:min-h-12 pl:shrink-0 pl:items-center pl:gap-2 pl:rounded-full pl:whitespace-nowrap pl:border-0 pl:px-6 pl:py-2 pl:text-sm pl:font-semibold pl:transition-colors ${
+                selected === "all"
+                  ? "active pl:bg-[#ff5722] pl:text-white"
+                  : "pl:bg-[#1a1a1a] pl:text-gray-300 pl:hover:bg-[#3d3d3d]"
+              }`}
               onClick={() => setFilter("all")}
             >
               <ChefHat size={19} />Todas as praças<span>{tickets.length}</span>
@@ -164,7 +154,11 @@ export default function KDS() {
                 key={station.id}
                 disabled={forbidden}
                 aria-selected={selected === station.id}
-                className={selected === station.id ? "active" : ""}
+                className={`pl:flex pl:min-h-12 pl:shrink-0 pl:items-center pl:gap-2 pl:rounded-full pl:whitespace-nowrap pl:border-0 pl:px-6 pl:py-2 pl:text-sm pl:font-semibold pl:transition-colors ${
+                  selected === station.id
+                    ? "active pl:bg-[#ff5722] pl:text-white"
+                    : "pl:bg-[#1a1a1a] pl:text-gray-300 pl:hover:bg-[#3d3d3d]"
+                }`}
                 onClick={() => setFilter(station.id)}
               >
                 <Icon size={19} />
@@ -213,76 +207,22 @@ export default function KDS() {
         </span>
       </div>
       <div
-        className="kds-grid"
+        className="kds-grid pl:grid pl:grid-cols-1 pl:items-stretch pl:gap-4 pl:md:grid-cols-2 pl:xl:grid-cols-3 pl:2xl:grid-cols-4"
         role="tabpanel"
         aria-label="Pedidos da praça selecionada"
         aria-busy={loading}
       >
-        {visible.map((ticket) => {
-          const age = urgency(ticket.created_at, now),
-            Icon = icons[ticket.sector] || ChefHat;
-          return (
-            <article
-              className={`kds-card ${age}`}
-              key={ticket.id}
-              data-ticket={ticket.id}
-            >
-              <div className="kds-top">
-                <strong>#{String(ticket.order_number).padStart(4, "0")}</strong>
-                <span className={`urgency-tag ${age}`}>
-                  <Clock3 size={16} />
-                  {Math.max(
-                    0,
-                    Math.floor(
-                      (now - new Date(ticket.created_at).getTime()) / 60000,
-                    ),
-                  )} min
-                </span>
-              </div>
-              <div className="kds-card-status">
-                <span>
-                  <Icon size={16} />
-                  {STATIONS.find((s) => s.id === ticket.sector)?.label}
-                </span>
-                <b>{ticket.status === "queued" ? "Na fila" : "Em preparo"}</b>
-              </div>
-              <p className="kds-urgency-label">{urgencyNames[age]}</p>
-              <ul>
-                {ticket.items.map((item, index) => (
-                  <li key={index}>
-                    <b>{item.quantity}×</b>
-                    <div>
-                      <strong>{item.name}</strong>
-                      {item.modifiers?.map((modifier) => (
-                        <small key={modifier}>{modifier}</small>
-                      ))}
-                      {item.notes && <p>{item.notes}</p>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <button
-                className="primary full"
-                disabled={!online || busy !== null}
-                onClick={() => advance(ticket)}
-              >
-                {busy === ticket.id
-                  ? "Confirmando…"
-                  : ticket.status === "queued"
-                  ? (
-                    <>
-                      <Flame size={19} />Iniciar preparo
-                    </>
-                  )
-                  : (
-                    <>
-                      <CheckCheck size={19} />Pronto neste setor
-                    </>
-                  )}
-              </button>
-            </article>
-          );
-        })}
+        {visible.map((ticket) => (
+          <OrderTicketCard
+            key={ticket.id}
+            ticket={ticket}
+            urgency={urgency(ticket.created_at, now)}
+            now={now}
+            busy={busy === ticket.id}
+            disabled={!online || busy !== null}
+            onAdvance={advance}
+          />
+        ))}
       </div>
       {loading && (
         <div className="empty" role="status">

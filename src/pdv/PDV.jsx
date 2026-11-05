@@ -1,21 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  ArrowRight,
-  Banknote,
-  Check,
-  Clock3,
-  CreditCard,
-  LockKeyhole,
-  Minus,
-  Plus,
-  RotateCcw,
-  Search,
-  ShoppingBasket,
-  Smartphone,
-  Trash2,
-  WifiOff,
-} from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { ArrowRight, Banknote, LockKeyhole, WifiOff } from "lucide-react";
 import sourceMenu from "../data/menu.json";
 import { useAuth } from "../auth/context";
 import { rpc, supabase } from "../lib/supabase";
@@ -25,13 +9,13 @@ import {
   money,
   normalize,
   orderPayload,
-  toggleModifier,
 } from "../lib/operations";
 import { useConnection } from "../components/useConnection";
 import { reportError } from "../lib/monitoring";
-import ErrorBoundary from "../components/ErrorBoundary";
 import CashDrawer from "./CashDrawer";
 import DemandPanel from "../kds/DemandPanel";
+import PdvTemplate from "./PdvTemplate";
+import PaymentActions from "./PaymentActions";
 const categories = [
   ["all", "Todos"],
   ["hamburgueres", "Hambúrgueres"],
@@ -528,25 +512,57 @@ export default function PDV({ preview = false }) {
       );
   }
   return (
-    <>
-      {!preview && (
-        <DemandPanel compact items={draft.items} products={products} />
+    <PdvTemplate
+      products={products}
+      filtered={filtered}
+      categories={categories}
+      category={category}
+      onCategory={setCategory}
+      query={query}
+      onQuery={setQuery}
+      draft={draft}
+      total={total}
+      frozen={frozen}
+      selected={selected}
+      onSelect={setSelected}
+      onAdd={add}
+      onUpdate={update}
+      onCustomer={(customer) =>
+        setDraft((previous) => ({ ...previous, customer }))}
+      onChannel={(channel) =>
+        setDraft((previous) => ({ ...previous, channel }))}
+      demand={!preview && (
+        <DemandPanel
+          compact
+          presentation="inline"
+          items={draft.items}
+          products={products}
+        />
       )}
-      <div className="pdv-heading">
-        <div>
-          <span className="eyebrow">ATENDIMENTO ÁGIL · PLANETA LANCHES</span>
-          <h1>
-            Frente de caixa<span className="heading-dot">.</span>
-          </h1>
-          <p>Escolha, personalize e siga para o pagamento.</p>
-        </div>
-        <div className="shift-indicator">
-          <span className="live-dot" />
-          {preview ? "Prévia visual" : `Caixa de ${profile.name.split(" ")[0]}`}
-          {" "}
-          {!preview && (
+      notices={
+        <>
+          {catalogError && (
+            <div className="error-message" role="alert">
+              {catalogError}
+              <button onClick={load} className="secondary">
+                Tentar sincronizar
+              </button>
+            </div>
+          )}
+          {!online && (
+            <div className="offline-banner" role="alert">
+              <WifiOff size={18} />Sem internet. O rascunho está preservado
+              neste terminal. Envios e pagamentos estão bloqueados.
+            </div>
+          )}
+        </>
+      }
+      operations={!preview && (
+        <>
+          <div className="pl:mb-3 pl:flex pl:items-center pl:justify-between pl:gap-3 pl:text-sm pl:text-gray-300">
+            <span>Caixa de {profile.name}</span>
             <button
-              className="text-button"
+              className="secondary"
               disabled={busy}
               onClick={() => {
                 setClosing(!closing);
@@ -555,508 +571,88 @@ export default function PDV({ preview = false }) {
             >
               Fechar caixa
             </button>
-          )}
-        </div>
-      </div>
-      {!preview && shift && <CashDrawer shiftId={shift.id} />}
-      {closing && (
-        <form className="close-shift" onSubmit={shiftAction}>
-          <label>
-            Dinheiro contado no fechamento (R$)
-            <input
-              inputMode="decimal"
-              required
-              value={shiftValue}
-              onChange={(e) => setShiftValue(e.target.value)}
-            />
-          </label>
-          <label>
-            Justificativa do fechamento
-            <input
-              required
-              minLength={5}
-              maxLength={500}
-              value={closingReason}
-              onChange={(e) =>
-                setClosingReason(e.target.value)}
-            />
-          </label>
-          <button
-            className="secondary"
-            type="button"
-            onClick={() => setClosing(false)}
-          >
-            Voltar
-          </button>
-          <button className="primary" disabled={!online || busy}>
-            Confirmar fechamento
-          </button>
-        </form>
-      )}
-      {catalogError && (
-        <div className="error-message" role="alert">
-          {catalogError}
-          <button onClick={load} className="secondary">
-            Tentar sincronizar
-          </button>
-        </div>
-      )}
-      {!preview && (
-        <div className="pending-orders">
-          <button
-            className="text-button"
-            disabled={busy || !online}
-            onClick={listPending}
-          >
-            Consultar meus pedidos aguardando pagamento
-            <ArrowRight size={13} />
-          </button>
-          {pendingOrders && (
-            <div>
-              {!pendingOrders.length && (
-                <p>Nenhum pedido pendente neste caixa.</p>
-              )}
-              {pendingOrders.map((o) => (
-                <button
-                  className="secondary"
-                  disabled={busy}
-                  key={o.id}
-                  onClick={() => resume(o)}
-                >
-                  #{o.number} · {o.customer} · {money(o.total_cents)}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      {!online && (
-        <div className="offline-banner" role="alert">
-          <WifiOff size={18} />
-          Sem internet. O rascunho está preservado neste terminal. Envios e
-          pagamentos estão bloqueados.
-        </div>
-      )}
-      <div className="pdv-layout">
-        <section className="catalog" id="catalogo">
-          <div className="catalog-top">
-            <label className="search-box">
-              <Search size={18} />
-              <input
-                aria-label="Buscar produto"
-                placeholder="Buscar um sabor ou ingrediente…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              {query && (
-                <button
-                  aria-label="Limpar busca"
-                  onClick={() => setQuery("")}
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </label>
-            <span>{products.length} produtos no cardápio</span>
           </div>
-          <div className="category-tabs" aria-label="Categorias">
-            {categories.map(([id, name]) => (
+          {!preview && shift && <CashDrawer shiftId={shift.id} />}
+          {closing && (
+            <form className="close-shift" onSubmit={shiftAction}>
+              <label>
+                Dinheiro contado no fechamento (R$)
+                <input
+                  inputMode="decimal"
+                  required
+                  value={shiftValue}
+                  onChange={(e) => setShiftValue(e.target.value)}
+                />
+              </label>
+              <label>
+                Justificativa do fechamento
+                <input
+                  required
+                  minLength={5}
+                  maxLength={500}
+                  value={closingReason}
+                  onChange={(e) => setClosingReason(e.target.value)}
+                />
+              </label>
               <button
-                key={id}
-                className={category === id ? "active" : ""}
-                onClick={() => setCategory(id)}
+                className="secondary"
+                type="button"
+                onClick={() => setClosing(false)}
               >
-                {name}
-                <span>
-                  {id === "all"
-                    ? products.length
-                    : products.filter((p) => p.category === id).length}
-                </span>
+                Voltar
               </button>
-            ))}
-          </div>
-          <div className="catalog-section-title">
-            <h2>{categories.find(([id]) => id === category)[1]}</h2>
-            <span>
-              Seleção rápida <span>↗</span>
-            </span>
-          </div>
-          <div className="product-grid">
-            {filtered.map((p) => (
-              <button
-                className="product-card"
-                key={p.id}
-                disabled={frozen}
-                onClick={() => add(p)}
-                aria-label={`Adicionar ${p.name}`}
-              >
-                <div className="product-image">
-                  <img
-                    src={p.image_path}
-                    alt={`Ilustração de ${p.name}`}
-                    loading="lazy"
-                  />
-                  <span>ILUSTRAÇÃO</span>
-                </div>
-                <div className="product-info">
-                  <small>
-                    {categories.find(([id]) => id === p.category)?.[1]}
-                  </small>
-                  <h3>{p.name}</h3>
-                  <p>{p.description || "Para acompanhar seu lanche."}</p>
-                  <div>
-                    <strong>{money(p.price_cents)}</strong>
-                    <span className="add-square">
-                      <Plus size={18} />
-                    </span>
-                  </div>
-                </div>
+              <button className="primary" disabled={!online || busy}>
+                Confirmar fechamento
               </button>
-            ))}
-          </div>
-          {!filtered.length && (
-            <div className="empty">
-              <Search size={30} />
-              <h2>
-                {category === "combos"
-                  ? "Seus combos entram aqui."
-                  : "Nenhum produto encontrado."}
-              </h2>
-              <p>
-                {category === "combos"
-                  ? "Nenhum combo cadastrado. Os preços do cardápio original foram preservados."
-                  : "Tente outro nome, ingrediente ou categoria."}
-              </p>
-            </div>
+            </form>
           )}
-          <p className="catalog-note">
-            Produtos e preços do cardápio da loja. Sem combos ou fichas técnicas
-            inventadas.
-          </p>
-        </section>
-        <aside className="checkout" id="pedido-atual">
-          <button
-            className="mobile-catalog-link text-button"
-            onClick={() =>
-              document
-                .getElementById("catalogo")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          >
-            ← Voltar ao cardápio
-          </button>
-          <div className="checkout-heading">
-            <div>
-              <ShoppingBasket size={19} />
-              <h2>Pedido atual</h2>
-            </div>
-            <span>
-              {draft.order
-                ? `#${draft.order.number}`
-                : `${draft.items.reduce((a, i) => a + i.quantity, 0)} itens`}
-            </span>
-          </div>
-          <div className="customer-fields">
-            <label>
-              Cliente
-              <input
-                disabled={frozen}
-                aria-label="Nome do cliente"
-                placeholder="Cliente balcão"
-                maxLength={100}
-                value={draft.customer}
-                onChange={(e) =>
-                  setDraft({ ...draft, customer: e.target.value })}
-              />
-            </label>
-            <label>
-              Canal
-              <select
-                disabled={frozen}
-                value={draft.channel}
-                onChange={(e) =>
-                  setDraft({ ...draft, channel: e.target.value })}
-              >
-                <option value="counter">Balcão</option>
-                <option value="whatsapp">WhatsApp · manual</option>
-              </select>
-            </label>
-          </div>
-          <div className="cart-items">
-            {!draft.items.length && (
-              <div className="cart-empty">
-                <ShoppingBasket size={38} />
-                <h3>Qual vai ser o pedido?</h3>
-                <p>
-                  Toque nos produtos ao lado.
-                  <br />
-                  Os detalhes ficam aqui, sem complicação.
-                </p>
-              </div>
-            )}
-            {draft.items.map((item) => (
-              <article
-                className={`cart-line ${
-                  selected === item.lineId ? "selected" : ""
-                }`}
-                key={item.lineId}
-              >
-                <div className="cart-line-top">
-                  <button
-                    className="item-name"
-                    aria-expanded={selected === item.lineId}
-                    onClick={() =>
-                      setSelected(
-                        selected === item.lineId ? null : item.lineId,
-                      )}
-                  >
-                    <strong>{item.name}</strong>
-                    <small>
-                      {item.modifiers.length
-                        ? item.modifiers.join(" · ")
-                        : "Toque para personalizar"}
-                    </small>
-                  </button>
-                  <strong>{money(item.quantity * item.price_cents)}</strong>
-                </div>
-                <div className="cart-line-tools">
-                  <div className="qty-control">
-                    <button
-                      aria-label={`Diminuir ${item.name}`}
-                      disabled={frozen}
-                      onClick={() =>
-                        update(item.lineId, { quantity: item.quantity - 1 })}
-                    >
-                      <Minus size={12} />
-                    </button>
-                    <b>{item.quantity}</b>
-                    <button
-                      aria-label={`Aumentar ${item.name}`}
-                      disabled={frozen || item.quantity >= 100}
-                      onClick={() =>
-                        update(item.lineId, { quantity: item.quantity + 1 })}
-                    >
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                  <button
-                    className="icon-button"
-                    aria-label={`Remover ${item.name}`}
-                    disabled={frozen}
-                    onClick={() => update(item.lineId, { quantity: 0 })}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                {selected === item.lineId && (
-                  <ErrorBoundary area="modifiers">
-                    <div className="inline-modifiers">
-                      <span>DO JEITO DO CLIENTE</span>
-                      <div>
-                        {item.allowed_modifiers.map((m) => (
-                          <button
-                            key={m}
-                            disabled={frozen}
-                            className={item.modifiers.includes(m)
-                              ? "active"
-                              : ""}
-                            onClick={() =>
-                              update(item.lineId, {
-                                modifiers: toggleModifier(item.modifiers, m),
-                              })}
-                          >
-                            {item.modifiers.includes(m) && <Check size={11} />}
-                            {" "}
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                      <textarea
-                        aria-label={`Observações de ${item.name}`}
-                        placeholder="Algum detalhe para a cozinha?"
-                        value={item.notes}
-                        maxLength={500}
-                        disabled={frozen}
-                        onChange={(e) =>
-                          update(item.lineId, { notes: e.target.value })}
-                      />
-                    </div>
-                  </ErrorBoundary>
-                )}
-              </article>
-            ))}
-          </div>
-          <div className="checkout-bottom">
-            <div className="subtotal">
-              <span>
-                {draft.order
-                  ? "Total calculado no banco"
-                  : "Total estimado · confirmado pelo banco"}
-              </span>
-              <strong>{money(total)}</strong>
-            </div>
-            {draft.order?.status === "cancelled"
-              ? (
-                <div className="error-message">
-                  <h3>Pedido cancelado.</h3>
-                  <p>Este pedido não está disponível para pagamento.</p>
-                  <button className="secondary" onClick={reset}>
-                    Novo pedido
-                  </button>
-                </div>
-              )
-              : draft.payment?.status === "confirmed"
-              ? (
-                <div className="payment-success" role="status">
-                  <Check size={23} />
-                  <h3>Pagamento confirmado.</h3>
-                  <p>Pedido liberado para os setores da cozinha.</p>
-                  <button className="primary full" onClick={reset}>
-                    Começar próximo pedido
-                    <Plus size={16} />
-                  </button>
-                </div>
-              )
-              : draft.order
-              ? (
-                <>
-                  <div className="payment-options">
-                    {[
-                      ["cash", "Dinheiro", Banknote],
-                      ["pix", "Pix", Smartphone],
-                      ["tef", "Cartão", CreditCard],
-                    ].map(([id, label, Icon]) => (
-                      <button
-                        key={id}
-                        disabled={busy || Boolean(draft.payment)}
-                        className={method === id ? "active" : ""}
-                        onClick={() => setMethod(id)}
-                      >
-                        <Icon size={17} />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {method !== "cash" && (
-                    <p className="payment-disclaimer">
-                      Pix Nubank de conta física: confirmação manual do
-                      administrador. TEF exige serviço homologado.
-                    </p>
-                  )}
-                  {paymentIntent?.pix && (
-                    <div className="pix-code">
-                      <QRCodeSVG
-                        value={paymentIntent.pix.copyPaste}
-                        size={150}
-                      />
-                      <p>
-                        {paymentIntent.pix.expiresAt
-                          ? `Válido até ${
-                            new Date(paymentIntent.pix.expiresAt)
-                              .toLocaleTimeString("pt-BR")
-                          }`
-                          : "QR Pix estático, sem expiração automática. Aguarde a conferência do crédito pelo administrador."}
-                      </p>
-                      <button
-                        className="secondary"
-                        onClick={() =>
-                          navigator.clipboard.writeText(
-                            paymentIntent.pix.copyPaste,
-                          )}
-                      >
-                        Copiar código Pix
-                      </button>
-                      <code>{paymentIntent.pix.copyPaste}</code>
-                    </div>
-                  )}
-                  <button
-                    className="primary full"
-                    disabled={!online || busy || preview}
-                    onClick={pay}
-                  >
-                    {busy
-                      ? "Processando…"
-                      : draft.payment
-                      ? "Retomar mesma tentativa"
-                      : method === "cash"
-                      ? "Confirmar recebimento em dinheiro"
-                      : method === "pix"
-                      ? "Gerar Pix com valor do pedido"
-                      : "Iniciar TEF"}
-                    <ArrowRight size={17} />
-                  </button>
-                  <p className="field-note">
-                    <LockKeyhole size={12} />A cozinha só recebe após a
-                    confirmação válida.
-                  </p>
-                </>
-              )
-              : (
-                <>
-                  <button
-                    className="primary full"
-                    onClick={send}
-                    disabled={!draft.items.length || busy || !online || preview}
-                  >
-                    {busy
-                      ? "Enviando…"
-                      : draft.submitted
-                      ? "Reenviar mesma tentativa"
-                      : "Ir para pagamento"}
-                    {draft.submitted
-                      ? <RotateCcw size={17} />
-                      : <ArrowRight size={17} />}
-                  </button>
-                  <p className="field-note">
-                    <Clock3 size={12} />
-                    {preview
-                      ? "Prévia sem banco. Pagamentos e envios desativados."
-                      : "O banco valida produtos, quantidades e preços."}
-                  </p>
-                </>
-              )}
-            {draft.order?.status === "pending_payment" && !draft.payment && (
+          {!preview && (
+            <div className="pending-orders">
               <button
-                className="clear-cart"
+                className="text-button"
                 disabled={busy || !online}
-                onClick={cancelUnpaid}
+                onClick={listPending}
               >
-                Cancelar pedido ainda sem cobrança
+                Consultar meus pedidos aguardando pagamento
+                <ArrowRight size={13} />
               </button>
-            )}
-            {error && (
-              <p className="error-message" role="alert">
-                {error}
-              </p>
-            )}
-            {draft.items.length > 0 && !draft.order && !draft.submitted && (
-              <button
-                className="clear-cart"
-                disabled={busy}
-                onClick={() => {
-                  if (confirm("Limpar o pedido em rascunho?")) reset();
-                }}
-              >
-                Limpar rascunho
-              </button>
-            )}
-          </div>
-        </aside>
-      </div>
-      <button
-        className="mobile-order-shortcut"
-        onClick={() => document
-          .getElementById("pedido-atual")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" })}
-      >
-        <ShoppingBasket size={17} />
-        <span>
-          Ver pedido · {draft.items.reduce((sum, i) => sum + i.quantity, 0)}
-          {" "}
-          itens
-        </span>
-        <strong>{money(total)}</strong>
-        <ArrowRight size={16} />
-      </button>
-    </>
+              {pendingOrders && (
+                <div>
+                  {!pendingOrders.length && (
+                    <p>Nenhum pedido pendente neste caixa.</p>
+                  )}
+                  {pendingOrders.map((o) => (
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      key={o.id}
+                      onClick={() => resume(o)}
+                    >
+                      #{o.number} · {o.customer} · {money(o.total_cents)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      paymentActions={
+        <PaymentActions
+          draft={draft}
+          busy={busy}
+          online={online}
+          preview={preview}
+          method={method}
+          setMethod={setMethod}
+          paymentIntent={paymentIntent}
+          pay={pay}
+          send={send}
+          reset={reset}
+          cancelUnpaid={cancelUnpaid}
+          error={error}
+        />
+      }
+    />
   );
 }
