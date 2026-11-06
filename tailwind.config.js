@@ -1,22 +1,22 @@
-// tailwind.config.js
-module.exports = {
+/** @type {import('tailwindcss').Config} */
+export default {
     content: ["./index.html", "./src/**/*.{js,jsx}"],
     theme: {
       extend: {
         colors: {
           dark: {
-            900: '#0F1115', // Fundo principal (Ultra Dark)
-            800: '#1A1D24', // Paineis e Cartões (Steel/Dark Grey)
-            700: '#2A2F3A', // Bordas e Divisórias
+            900: '#0F1115',
+            800: '#1A1D24',
+            700: '#2A2F3A',
           },
           brasa: {
-            500: '#FF5722', // Laranja-fogo principal (Accent)
-            600: '#E64A19', // Hover
-            glow: 'rgba(255, 87, 34, 0.4)' // Sombra neon para realces
+            500: '#FF5722',
+            600: '#E64A19',
+            glow: 'rgba(255, 87, 34, 0.4)'
           }
         },
         fontFamily: {
-          sans: ['"Inter"', '"Space Grotesk"', 'sans-serif'], // Tipografia geométrica
+          sans: ['"Inter"', '"Space Grotesk"', 'sans-serif'],
         },
         boxShadow: {
           'brasa-glow': '0 4px 20px -2px rgba(255, 87, 34, 0.4)',
