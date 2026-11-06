@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 export default function Audit() {
@@ -10,7 +10,6 @@ export default function Audit() {
     e.preventDefault();
     if (!phoneToErase) return;
     
-    // Confirmação dupla, exigida em operações destrutivas
     const confirm = window.confirm(`ATENÇÃO: Deseja anonimizar irreversivelmente os dados do número ${phoneToErase}? O histórico de vendas será mantido, mas a identidade será apagada.`);
     
     if (!confirm) return;
@@ -18,7 +17,6 @@ export default function Audit() {
     setMessage(null);
 
     try {
-      // Comunica com a Edge Function
       const { data, error } = await supabase.functions.invoke('eco-lgpd', {
         body: { phone: phoneToErase, action: 'delete' }
       });
@@ -27,7 +25,7 @@ export default function Audit() {
       
       setMessage({ type: 'success', text: data.message });
       setPhoneToErase('');
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Erro ao anonimizar cliente. Verifique se o número existe.' });
     } finally {
       setIsLoading(false);
@@ -42,8 +40,6 @@ export default function Audit() {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* Painel LGPD */}
         <div className="bg-dark-800 p-8 rounded-2xl border border-red-500/30 shadow-glass">
           <div className="flex items-center gap-3 mb-6">
             <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
@@ -82,7 +78,6 @@ export default function Audit() {
           )}
         </div>
 
-        {/* Placeholder para a Tabela de Logs de Auditoria */}
         <div className="bg-dark-800 p-8 rounded-2xl border border-dark-700 shadow-glass">
           <h2 className="text-2xl font-bold text-white mb-6">Logs Recentes</h2>
           <div className="space-y-3">
@@ -93,7 +88,6 @@ export default function Audit() {
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );

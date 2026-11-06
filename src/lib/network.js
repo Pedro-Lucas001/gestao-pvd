@@ -1,54 +1,28 @@
-// Utilizando a API nativa do IndexedDB para máxima performance
-const DB_NAME = 'planeta_lanches_db';
-const STORE_NAME = 'offline_orders';
+// src/lib/network.js
 
-// Inicializa o banco de dados local
-const initDB = () => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'local_id' });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-};
-
-// Guarda um pedido na fila quando não há internet
-export const saveOrderOffline = async (orderPayload) => {
-  const db = await initDB();
-  const transaction = db.transaction(STORE_NAME, 'readwrite');
-  const store = transaction.objectStore(STORE_NAME);
+export const fetchWithTimeout = async (url, options = {}, transport = fetch, timeout = 10000) => {
+  const controller = new AbortController();
   
-  // Adiciona um ID local temporário e a data
-  const localOrder = {
-    ...orderPayload,
-    local_id: `offline_${Date.now()}`,
-    saved_at: new Date().toISOString()
-  };
-  
-  store.add(localOrder);
-  return localOrder;
-};
+  const signal = options.signal 
+    ? AbortSignal.any([options.signal, controller.signal]) 
+    : controller.signal;
 
-// Busca todos os pedidos retidos
-export const getOfflineOrders = async () => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-};
+  const id = setTimeout(() => {
+    controller.abort();
+  }, timeout);
 
-// Apaga o pedido da fila local após ser enviado com sucesso ao Supabase
-export const removeOfflineOrder = async (localId) => {
-  const db = await initDB();
-  const transaction = db.transaction(STORE_NAME, 'readwrite');
-  transaction.objectStore(STORE_NAME).delete(localId);
+  try {
+    const response = await transport(url, {
+      ...options,
+      signal,
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    if (error.name === 'AbortError' || error.message.includes('aborted')) {
+      throw new Error('TEST_TIMEOUT', { cause: error });
+    }
+    throw error;
+  }
 };

@@ -1,48 +1,53 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase'; // Certifique-se de que o caminho está correto
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 
 export default function PublicOrder() {
   const [cart, setCart] = useState([]);
   const [step, setStep] = useState('MENU'); // MENU, CHECKOUT, PAYMENT, SUCCESS
-  const [idleTime, setIdleTime] = useState(0);
   
   // Estados para o PIX Dinâmico
   const [qrCodeData, setQrCodeData] = useState(null);
   const [currentOrderId, setCurrentOrderId] = useState(null);
 
-  // Auto-Reset de Abandono (Reseta o Totem após 2 minutos sem tocar no ecrã)
-  useEffect(() => {
-    let timer;
-    if (cart.length > 0 && step !== 'PAYMENT' && step !== 'SUCCESS') {
-      timer = setInterval(() => setIdleTime(prev => prev + 1), 1000);
-    }
-    
-    if (idleTime >= 120) {
-      resetTotem();
-    }
-
-    const resetIdle = () => setIdleTime(0);
-    window.addEventListener('click', resetIdle);
-    window.addEventListener('touchstart', resetIdle);
-
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener('click', resetIdle);
-      window.removeEventListener('touchstart', resetIdle);
-    };
-  }, [idleTime, cart.length, step]);
-
-  const resetTotem = () => {
+  // Envolvemos em useCallback para estabilizar a referência da função
+  const resetTotem = useCallback(() => {
     setCart([]);
     setStep('MENU');
-    setIdleTime(0);
     setQrCodeData(null);
     setCurrentOrderId(null);
-  };
+  }, []);
+
+  // Temporizador de inatividade limpo usando setTimeout em vez de setState síncrono no effect
+  useEffect(() => {
+    let timeout;
+    if (cart.length > 0 && step !== 'PAYMENT' && step !== 'SUCCESS') {
+      // Se passar 120 segundos (2 minutos) sem interação, reseta o totem
+      timeout = setTimeout(() => {
+        resetTotem();
+      }, 120000);
+    }
+
+    const resetIdleTimer = () => {
+      if (timeout) clearTimeout(timeout);
+      if (cart.length > 0 && step !== 'PAYMENT' && step !== 'SUCCESS') {
+        timeout = setTimeout(() => {
+          resetTotem();
+        }, 120000);
+      }
+    };
+
+    window.addEventListener('click', resetIdleTimer);
+    window.addEventListener('touchstart', resetIdleTimer);
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      window.removeEventListener('click', resetIdleTimer);
+      window.removeEventListener('touchstart', resetIdleTimer);
+    };
+  }, [cart.length, step, resetTotem]);
 
   const addToCart = (product) => {
     setCart([...cart, product]);
-    setIdleTime(0);
   };
 
   const total = cart.reduce((acc, item) => acc + item.price, 0);
@@ -50,21 +55,18 @@ export default function PublicOrder() {
   // Integração PIX e Supabase Edge Functions
   const handlePayment = async () => {
     setStep('PAYMENT');
-    setQrCodeData(null); // Limpa QR Code anterior
+    setQrCodeData(null);
     
     try {
-      // 1. Invoca a Edge Function para gerar o PIX
       const { data, error } = await supabase.functions.invoke('checkout-payment', {
         body: { total_amount: total, items: cart, source: 'totem' }
       });
 
       if (error) throw error;
       
-      // 2. Guarda o payload do PIX e o ID do pedido
       setQrCodeData(data.qr_code_payload); 
       setCurrentOrderId(data.order_id);
 
-      // 3. Ouve ativamente o Supabase para a confirmação do pagamento
       const channel = supabase
         .channel(`order-${data.order_id}`)
         .on('postgres_changes', { 
@@ -74,10 +76,9 @@ export default function PublicOrder() {
           filter: `id=eq.${data.order_id}` 
         }, (payload) => {
           if (payload.new.status === 'preparing' || payload.new.status === 'paid') {
-            // Pagamento confirmado! Avança para o ecrã de sucesso
             setStep('SUCCESS');
-            setTimeout(resetTotem, 5000); // Volta ao início após 5 segundos
-            supabase.removeChannel(channel); // Limpa a escuta
+            setTimeout(resetTotem, 5000);
+            supabase.removeChannel(channel);
           }
         })
         .subscribe();
@@ -119,7 +120,6 @@ export default function PublicOrder() {
           </aside>
 
           <section className="flex-1 p-8 grid grid-cols-3 gap-6 overflow-y-auto pb-32">
-            {/* Exemplo de Produto Fixo para o Template */}
             <div 
               onClick={() => addToCart({ name: 'Mega Planeta Burger', price: 32.90 })}
               className="bg-dark-800 rounded-3xl p-6 border-2 border-dark-700 active:border-brasa-500 flex flex-col items-center text-center gap-4 cursor-pointer shadow-glass transition-all"

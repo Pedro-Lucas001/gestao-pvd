@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useConnection } from '../components/useConnection';
 import { saveOrderOffline } from '../lib/network';
 
 export default function PdvTemplate() {
   const [cart, setCart] = useState([]);
-  const [customerPhone, setCustomerPhone] = useState(''); // Estado para Fidelidade/Cashback
+  const [customerPhone, setCustomerPhone] = useState('');
   const { isOnline } = useConnection();
 
   const handleCheckout = async () => {
-    // Adiciona o telefone do cliente ao payload para acionar o trigger de fidelidade
     const orderPayload = { 
       items: cart, 
       total: 37.90,
@@ -16,21 +15,17 @@ export default function PdvTemplate() {
     };
 
     if (isOnline) {
-      // Fluxo normal via Supabase (aqui chamaria a inserção na tabela orders)
       console.log('Enviado para o banco de dados:', orderPayload);
       alert('Pedido enviado para o KDS!');
     } else {
-      // Fluxo Offline via IndexedDB
       await saveOrderOffline(orderPayload);
       alert('Sem rede! Pedido guardado na fila local e será enviado automaticamente.');
     }
     
-    // Limpa a comanda e o cliente após a venda
     setCart([]);
     setCustomerPhone('');
   };
 
-  // Simulação rápida para adicionar ao carrinho
   const handleAddToCart = () => {
     setCart([...cart, { name: 'Mega Planeta Burger', price: 32.90, modifiers: [] }]);
   };
@@ -39,8 +34,6 @@ export default function PdvTemplate() {
 
   return (
     <div className="flex h-screen w-full bg-dark-900 text-white font-sans overflow-hidden">
-      
-      {/* SEÇÃO ESQUERDA: Grid de Produtos */}
       <main className="flex-1 flex flex-col p-6 overflow-y-auto">
         <header className="flex justify-between items-center mb-8">
           <div>
@@ -67,7 +60,6 @@ export default function PdvTemplate() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {/* Exemplo de Cartão de Produto */}
           <div 
             onClick={handleAddToCart}
             className="group relative bg-dark-800 rounded-xl p-5 border border-dark-700 hover:border-brasa-500 transition-all cursor-pointer shadow-glass hover:shadow-brasa-glow"
@@ -86,14 +78,12 @@ export default function PdvTemplate() {
         </div>
       </main>
 
-      {/* SEÇÃO DIREITA: Comanda e Fidelidade */}
       <aside className="w-96 bg-dark-800 border-l border-dark-700 flex flex-col shadow-2xl z-10">
         <div className="p-6 border-b border-dark-700 flex justify-between items-center">
           <h2 className="text-xl font-bold text-white">Comanda Atual</h2>
           <span className="bg-brasa-500 text-white text-xs font-bold px-2 py-1 rounded-md">MESA 04</span>
         </div>
         
-        {/* Identificação do Cliente (Programa de Fidelidade) */}
         <div className="p-6 border-b border-dark-700 bg-dark-900">
           <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
             Cliente / Fidelidade (Telemóvel)
@@ -152,7 +142,6 @@ export default function PdvTemplate() {
           </button>
         </div>
       </aside>
-
     </div>
   );
 }
