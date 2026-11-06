@@ -3101,3 +3101,20 @@ label {
     overflow-wrap: anywhere;
   }
 }
+
+/* Navegação limitada ao trabalho de cada função. */
+.staff-navigation { display:flex;gap:6px;flex-wrap:wrap; }
+.staff-navigation a { color:#b8b8bd;text-decoration:none;font-size:12px;padding:10px 12px;border:1px solid #414141;border-radius:7px; }
+.staff-navigation a.active { color:#ff8555;background:#ff572212;border-color:#b2502e; }
+.public-menu-link { text-decoration:none; }
+.access-table-scroll { overflow-x:auto; }
+.access-overview table { width:100%;border-collapse:collapse;font-size:13px; }
+.access-overview th,.access-overview td { padding:15px 12px;text-align:left;border-bottom:1px solid #414141;vertical-align:top;line-height:1.6; }
+.access-overview thead { color:#ff9a70; }
+.access-overview tbody th { min-width:150px; }
+.staff-create summary { font-weight:700;cursor:pointer;padding:8px 0; }
+.staff-create p { margin:15px 0;line-height:1.7;font-size:13px; }
+.staff-create fieldset { border:0;margin:0 0 18px;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px; }
+.auth-form>.text-button:first-child { align-self:flex-start;margin-bottom:26px; }
+@media(max-width:900px){ .staff-shell .topbar { flex-wrap:wrap;gap:12px; }.staff-navigation { order:3;width:100%; }.topbar-actions { flex-wrap:wrap; } }
+@media(max-width:600px){ .staff-create fieldset { grid-template-columns:1fr; }.topbar .public-menu-link { font-size:11px; }.access-overview th,.access-overview td { padding:12px 8px; } }

@@ -16,17 +16,7 @@ import CashDrawer from "./CashDrawer";
 import DemandPanel from "../kds/DemandPanel";
 import PdvTemplate from "./PdvTemplate";
 import PaymentActions from "./PaymentActions";
-const categories = [
-  ["all", "Todos"],
-  ["hamburgueres", "Hambúrgueres"],
-  ["dogoes", "Dogões"],
-  ["combos", "Combos"],
-  ["porcoes", "Porções"],
-  ["pasteis", "Pastéis"],
-  ["coxinhas", "Mini coxinhas"],
-  ["bebidas", "Bebidas"],
-  ["adicionais", "Adicionais"],
-];
+import { categories } from "../data/categories";
 const previewProducts = sourceMenu.map((p) => ({
   ...p,
   price_cents: p.price,

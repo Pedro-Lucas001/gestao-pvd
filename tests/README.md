@@ -1,5 +1,7 @@
 # Validação
 
+O mostruário está em `/` e `/cardapio`; `/login` é exclusivo da equipe. Veja [a matriz de acesso e ativação](../docs/access-and-public-menu.md). `public_menu.sql`, incluído em `npm run test:db`, verifica produtos ativos, campos públicos mínimos, atualização de preços e negação de acesso anônimo a tabelas e operações internas.
+
 ## Frontend
 
 `npm run validate`: ESLint, testes Node e build Vite. Verificam centavos sem valores ambíguos, modificadores exclusivos, chaves/corpo de retry sem preço vindo do cliente, limiares KDS, matriz de rotas, normalização de RPC, 10 min de inatividade com relógio monotônico e abort de requisição sem perder headers de autenticação.

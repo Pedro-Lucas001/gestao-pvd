@@ -9,13 +9,101 @@ import {
   urgency,
 } from "../src/lib/operations.js";
 import { canAccess } from "../src/auth/permissions.js";
+import { accessModules } from "../src/auth/modules.js";
+import { filterMenu, publicProducts } from "../src/public/menuData.js";
+
+test("every internal module follows the same least-privilege role matrix", () => {
+  const expected = {
+    admin: accessModules.map((m) => m.path),
+    cashier: ["/pdv", "/atendimento"],
+    kitchen: ["/cozinha"],
+  };
+  for (const role of [
+    "admin",
+    "cashier",
+    "kitchen",
+    null,
+    "customer",
+    "owner",
+    "",
+  ]) {
+    const actual = accessModules
+      .filter((m) => canAccess(role, m.roles))
+      .map((m) => m.path);
+    assert.deepEqual(actual, expected[role] || []);
+  }
+  assert.equal(canAccess("cashier"), false);
+});
+
+test("public catalog projects presentation fields and rejects invalid prices", () => {
+  const item = {
+    id: "burger",
+    name: "Hambúrguer",
+    category: "hamburgueres",
+    price_cents: 1700,
+    description: "Pão e carne",
+    image_path: "/menu/hamburgueres.svg",
+    unit_cost_cents: 500,
+    stock: 10,
+    customer_phone: "private-fixture",
+    sector: "grill",
+    allowed_modifiers: ["Sem cebola"],
+  };
+  assert.deepEqual(
+    Object.keys(publicProducts([item])[0]).sort(),
+    [
+      "id",
+      "name",
+      "category",
+      "description",
+      "price_cents",
+      "image_path",
+    ].sort(),
+  );
+  for (const price_cents of [-1, 0, 1.5, "1700", NaN, null]) {
+    assert.throws(() => publicProducts([{ ...item, price_cents }]));
+  }
+  assert.throws(() => publicProducts(null));
+});
+
+test("public menu search ignores accents and combines category with ingredients", () => {
+  const products = [
+    {
+      id: "burger",
+      name: "Hambúrguer",
+      category: "hamburgueres",
+      description: "Pão e queijo",
+    },
+    {
+      id: "pastel",
+      name: "Frango com queijo",
+      category: "pasteis",
+      description: "Pastel crocante",
+    },
+  ];
+  assert.deepEqual(
+    filterMenu(products, "all", " hamburguer ").map((p) => p.id),
+    ["burger"],
+  );
+  assert.deepEqual(
+    filterMenu(products, "pasteis", "QUEIJO").map((p) => p.id),
+    ["pastel"],
+  );
+  assert.deepEqual(filterMenu(products, "all", "inexistente"), []);
+});
 test("currency parsing rejects ambiguous values and uses exact cents", () => {
   assert.equal(cents("19,90"), 1990);
   assert.equal(cents("0.05"), 5);
   assert.equal(cents("100"), 10000);
-  for (
-    const invalid of ["1.234,56", "1e3", "-1", "1.999", "NaN", "", "2,3,4"]
-  ) {
+  for (const invalid of [
+    "1.234,56",
+    "1e3",
+    "-1",
+    "1.999",
+    "NaN",
+    "",
+    "2,3,4",
+  ]) {
     assert.throws(() => cents(invalid));
   }
 });
@@ -75,9 +163,8 @@ test("RPC composite accepts object or a single-row response and rejects ambiguit
 });
 
 test("inactivity locks at ten minutes even when a wall clock moves backwards", async () => {
-  const { expiredActivity, IDLE_LIMIT_MS } = await import(
-    "../src/auth/useIdleLock.js"
-  );
+  const { expiredActivity, IDLE_LIMIT_MS } =
+    await import("../src/auth/useIdleLock.js");
   assert.equal(IDLE_LIMIT_MS, 600000);
   assert.equal(expiredActivity(1000, 100, 600999, 600099), false);
   assert.equal(expiredActivity(1000, 100, 601000, 600100), true);
@@ -149,6 +236,8 @@ test("landing pages are selected by verified operator role", async () => {
   assert.equal(homeForRole("admin"), "/dashboard");
   assert.equal(homeForRole("cashier"), "/pdv");
   assert.equal(homeForRole("kitchen"), "/cozinha");
+  assert.equal(homeForRole(null), "/login");
+  assert.equal(homeForRole("customer"), "/login");
 });
 
 test("order prediction follows the slowest required station and responds to cart quantities", async () => {
@@ -172,11 +261,14 @@ test("order prediction follows the slowest required station and responds to cart
     },
   ];
   assert.equal(
-    estimateOrderPreparation(stations, [{
-      id: "burger",
-      sector: "grill",
-      quantity: 2,
-    }, { id: "drink", sector: "bar", quantity: 4 }]),
+    estimateOrderPreparation(stations, [
+      {
+        id: "burger",
+        sector: "grill",
+        quantity: 2,
+      },
+      { id: "drink", sector: "bar", quantity: 4 },
+    ]),
     20,
   );
   assert.equal(
@@ -198,9 +290,8 @@ test("order prediction follows the slowest required station and responds to cart
 });
 
 test("an empty station never promises less than one item's preparation average", async () => {
-  const { calculateDemand, estimateOrderPreparation } = await import(
-    "../src/kds/demand.js"
-  );
+  const { calculateDemand, estimateOrderPreparation } =
+    await import("../src/kds/demand.js");
   const station = {
     sector: "grill",
     queued_items: 0,

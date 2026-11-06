@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase, rpc } from "../lib/supabase";
 import TerminalSetup from "./TerminalSetup";
+import StaffCreate from "./StaffCreate";
+import { roleDescriptions } from "../auth/modules";
 export default function Team() {
   const [team, setTeam] = useState([]),
     [error, setError] = useState(""),
@@ -22,9 +24,14 @@ export default function Team() {
       <span className="eyebrow">PESSOAS E SEGURANÇA</span>
       <h1>Equipe e acessos.</h1>
       <p>
-        Contas individuais e PIN pessoal para caixa, cozinha e retomada do
-        administrador. E-mail e senha continuam sendo a autenticação principal.
+        Contas individuais e permissões por função. Funcionários usam o PIN pessoal em terminais cadastrados ou e-mail e senha; administradores entram com e-mail e senha.
       </p>
+      <article className="management-panel access-overview">
+        <h2>O que cada pessoa pode acessar</h2>
+        <p>Cliente: somente o cardápio público, sem login. As áreas abaixo são exclusivas da equipe.</p>
+        <div className="access-table-scroll"><table><thead><tr><th scope="col">Perfil</th><th scope="col">Permissão</th></tr></thead><tbody>{roleDescriptions.map((r) => <tr key={r.role}><th scope="row">{r.name}</th><td>{r.scope}</td></tr>)}</tbody></table></div>
+      </article>
+      <StaffCreate onCreated={load} />
       <TerminalSetup />
       <article className="management-panel">
         <h2>Pessoas da equipe</h2>

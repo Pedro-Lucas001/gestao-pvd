@@ -70,6 +70,8 @@ def mock_api(route):
         data={'id':IDS[role],'aud':'authenticated','role':'authenticated','email':role+'@fixture.test','app_metadata':{},'user_metadata':{}}
     elif path=='/rest/v1/profiles':
         data={'id':IDS[role],'name':role.capitalize(),'role':role,'active':True,'sector':'grill' if role=='kitchen' else None}
+    elif path=='/rest/v1/rpc/public_menu':
+        data=[{k:product.get(k,'') for k in ['id','name','category','description','price_cents','image_path']} for product in CATALOG]
     elif path=='/rest/v1/products':
         data=CATALOG
     elif path=='/rest/v1/shifts':
@@ -133,33 +135,23 @@ if __name__=='__main__':
             errors=[]
             page.on('pageerror',lambda e:errors.append(str(e)))
             navigate(page,preview_port)
-            expect(page.get_by_text('Prévia visual sem Supabase.',exact=True)).to_be_visible()
-            expect(page.locator('[data-product-card]')).to_have_count(47)
-            assert page.locator('.pl-pdv').evaluate('(el) => getComputedStyle(el).backgroundColor') == 'rgb(26, 26, 26)'
-            assert page.locator('[data-product-card]').first.evaluate('(el) => getComputedStyle(el).backgroundColor') == 'rgb(45, 45, 45)'
-            assert page.locator('[data-product-card]').first.evaluate('(el) => getComputedStyle(el).borderRadius') == '12px'
-            page.get_by_role('button',name='Adicionar X-Tudo',exact=True).click()
-            page.get_by_role('button',name='Sem cebola',exact=True).click()
-            page.get_by_role('button',name='Ponto: ao ponto',exact=True).click()
-            page.get_by_role('button',name='Ponto: bem passado',exact=True).click()
-            expect(page.locator('[data-inline-modifiers] [aria-pressed="true"]')).to_have_count(2)
-            page.get_by_label('Observações de X-Tudo').fill('Sem gelo na bebida')
-            expect(page.get_by_role('button',name='Cobrar e Enviar (KDS)')).to_be_disabled()
-            page.evaluate('window.scrollTo(0,0)')
-            page.screenshot(path='/tmp/planeta-pdv-desktop.png',full_page=False)
+            expect(page.get_by_role('heading',name='Nosso cardápio.',exact=True)).to_be_visible()
+            expect(page.locator('[data-menu-product]')).to_have_count(47)
+            expect(page.locator('.sidebar')).to_have_count(0)
+            expect(page.get_by_role('button',name='Cobrar e Enviar (KDS)')).to_have_count(0)
+            page.get_by_role('searchbox',name='Buscar no cardápio').fill('x-tudo')
+            expect(page.locator('[data-menu-product]')).to_have_count(1)
+            page.get_by_role('button',name='Limpar busca',exact=True).click()
+            page.get_by_role('button',name='Pastéis',exact=True).click()
+            expect(page.locator('[data-menu-product]')).to_have_count(3)
+            page.screenshot(path='/tmp/planeta-cardapio-desktop.png',full_page=False)
             page.set_viewport_size({'width':390,'height':844})
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-            page.evaluate('window.scrollTo(0,0)')
-            page.screenshot(path='/tmp/planeta-pdv-mobile.png',full_page=False)
-            page.get_by_role('button',name='Aumentar X-Tudo',exact=True).click()
-            page.get_by_role('button',name='Aumentar X-Tudo',exact=True).click()
-            expect(page.locator('[data-cart-total]')).to_have_text('R$ 51,00')
-            page.reload()
-            expect(page.locator('[data-cart-line]')).to_contain_text('3x X-Tudo')
-            expect(page.locator('[data-cart-total]')).to_have_text('R$ 51,00')
-            page.get_by_role('button',name='Remover X-Tudo',exact=True).click()
-            expect(page.locator('[data-cart-line]')).to_have_count(0)
-            expect(page.locator('[data-cart-total]')).to_have_text('R$ 0,00')
+            page.screenshot(path='/tmp/planeta-cardapio-mobile.png',full_page=False)
+            page.get_by_role('link',name='Área da equipe',exact=True).click()
+            expect(page.get_by_role('heading',name='Vamos começar o turno?',exact=True)).to_be_visible()
+            page.goto(f'http://127.0.0.1:{preview_port}/pdv')
+            expect(page).to_have_url(f'http://127.0.0.1:{preview_port}/login')
             page.close()
             app,app_port=serve(True);processes.append(app)
             for role in ['cashier','kitchen','admin']:
@@ -167,6 +159,7 @@ if __name__=='__main__':
                 context.route('http://127.0.0.1:54399/**',mock_api)
                 page=context.new_page();page.add_init_script("try{localStorage.setItem('planeta:registered-terminal:v1','"+'f'*64+"')}catch{}");page.clock.install();page.on('pageerror',lambda e:errors.append(str(e)))
                 navigate(page,app_port)
+                page.goto(f'http://127.0.0.1:{app_port}/login')
                 page.get_by_label('E-mail',exact=True).fill(role+'@fixture.test')
                 page.get_by_label('Senha',exact=True).fill('test-password-only')
                 page.get_by_role('button',name='Entrar no meu espaço').click()
@@ -229,7 +222,7 @@ if __name__=='__main__':
             public.close()
             assert not errors,errors
             browser.close()
-            print('UI OK: prévia, 47 produtos, modificadores inline, celular, offline, mesmo body/key no retry, pagamento dinheiro, auto-lock após 10 min e rotas por cargo. Auth/REST SIMULADOS; sem validação de Supabase hospedado.')
+            print('UI OK: cardápio público, 47 produtos, filtros, login interno, celular, offline, mesmo body/key no retry, pagamento dinheiro, auto-lock após 10 min e rotas por cargo. Auth/REST SIMULADOS; sem validação de Supabase hospedado.')
     finally:
         for proc in processes:
             os.killpg(proc.pid,signal.SIGTERM)
