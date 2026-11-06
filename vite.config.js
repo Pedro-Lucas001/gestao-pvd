@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+  server: { allowedHosts: ['terminal.local'] },
   plugins: [
     tailwindcss(), 
     react(),
@@ -16,6 +17,7 @@ export default defineConfig({
       manifest: {
         name: 'Planeta Lanches Enterprise',
         short_name: 'PlanetaPDV',
+        start_url: '/sistema',
         description: 'Sistema Integrado de Gestão e KDS',
         theme_color: '#0F1115', // Ultra Dark
         background_color: '#0F1115',

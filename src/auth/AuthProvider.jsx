@@ -17,7 +17,7 @@ async function operatorProfile(userId) {
 export default function AuthProvider({ children }) {
   const [session, setSession] = useState(null),
     [profile, setProfile] = useState(null),
-    [loading, setLoading] = useState(true),
+    [loading, setLoading] = useState(Boolean(supabase)),
     [authError, setAuthError] = useState(""),
     [lease, setLease] = useState(0),
     [idleLocked, setIdleLocked] = useState(false);
