@@ -1,64 +1,39 @@
-# Implantação e configuração
+# Implantação e operação
 
-Nenhum projeto Supabase, deploy Vercel, gateway Pix/TEF ou conta de WhatsApp foi criado/publicado por esta entrega. Todas as chaves e destinos precisam ser configurados nos serviços apropriados.
+Use [activation.md](activation.md) para a sequência completa. Esta entrega versiona código/configuração; não cria projetos, não envia mensagens, não transfere dinheiro e não faz deploy automaticamente.
 
-## 1. Dois ambientes reais e isolados
+## Staging e produção
 
-Crie dois projetos Supabase: `planeta-staging` e `planeta-production`, e dois destinos de Vercel (ou use ambientes separados com variáveis próprias e previews sem credenciais de produção).
+Crie projetos Supabase separados e destinos/variáveis Vercel isolados. Nunca aponte previews para o banco de produção. No frontend: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_APP_ENV`, opcional `VITE_SENTRY_DSN`. Estes são valores públicos incorporados no bundle. Chaves de serviço, Pix, tokens Meta, senha, PIN e worker secret ficam exclusivamente nos segredos Supabase.
 
-| Variável frontend | Staging | Production |
-| --- | --- | --- |
-| `VITE_SUPABASE_URL` | URL do projeto staging | URL do projeto production |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | publishable ou anon pública staging | publishable ou anon pública production |
-| `VITE_APP_ENV` | `staging` | `production` |
+Mantenha signup público desativado, senhas fortes e acesso à plataforma restrito. MFA administrativo da aplicação ainda exige o fluxo de desafio AAL2; ativá-lo no Auth sem implementar a tela/desafio não substitui essa etapa. O login inicial da aplicação é e-mail/senha; PIN não é login independente. Configure MFA nas contas de administração da plataforma e homologue o que for adotado para a loja.
 
-São valores públicos incorporados no bundle. **Nunca** coloque `service_role`, `sb_secret_*`, chave PSP, PIN, senha, connection string ou chave de assinatura em variável `VITE_*`. O código também recusa chaves secretas modernas e JWT legado com role diferente de anon. A segurança depende de RLS, não do sigilo da chave pública. Cada preview deve usar apenas staging ou permanecer em prévia visual sem backend.
+## Banco
 
-Em desenvolvimento, copie `.env.example` para `.env.local` e preencha apenas os valores públicos. Esses arquivos são ignorados pelo Git. Credenciais do Supabase CLI ficam no gerenciador/secret do CI; nunca em scripts versionados.
+As migrations são progressivas, da 001 à 011. Faça backup e aplique primeiro em staging. `supabase/tests/bootstrap.sql` é um fixture de testes em PostgreSQL vazio: **nunca** aplicar em projeto real. `supabase db reset` é só para desenvolvimento local descartável. `supabase db push` e importação inicial de seed exigem vínculo com o projeto correto e credenciais de administração fornecidas com segurança pelo usuário.
 
-## 2. Aplicar banco e criar primeiro administrador
+Não reutilize contas/tabelas do SQLite sem migração conferida. Não foram alterados os dados antigos. Planos de retenção, saldos de abertura, histórico de pagamentos, usuários e receitas reais precisam de conferência na migração de negócio.
 
-Instale o Supabase CLI oficial e autentique com a sua conta pelo fluxo seguro do serviço. Os comandos são templates documentados, não foram executados contra um projeto remoto:
+## Pooling
 
-```sh
-supabase link --project-ref SEU_PROJECT_REF_STAGING
-supabase db push
-```
+Frontend usa REST/Realtime, não conexão SQL direta. `supabase/config.toml` habilita pooler **local** transaction com 15 conexões/100 clientes, valores iniciais de desenvolvimento. Isso não muda o Supavisor hospedado. Configure o pooler hospedado pelo painel do projeto, dimensione pelo plano/carga e meça picos reais. Workers SQL externos devem usar o Transaction Pooler do painel com TLS validado, concorrência limitada e política de prepared statements compatível. Não invente hostname, senha ou porta; a conexão vem do serviço.
 
-O seed deve ser aplicado explicitamente na primeira configuração pelo SQL Editor ou CLI com inclusão de seed; `supabase db reset` aplica seed **somente no ambiente local descartável**. Não rode reset em produção. `supabase/seed.sql` usa `ON CONFLICT DO NOTHING`, para não sobrescrever preços já editados; importe uma vez e confirme os 47 produtos.
+## Frontend Edge
 
-No dashboard Supabase Auth, mantenha **cadastro público desativado**, crie sua conta administrativa com senha forte de pelo menos 10 caracteres e confirme o e-mail. Somente no SQL Editor do projeto correto, promova essa conta após verificar seu UUID:
+Vercel: `npm ci`, build `npm run build`, output `dist`, rotas SPA e cabeçalhos em `vercel.json`. Há chunks separados de React, Supabase, QR e módulos administrativos; gestão e monitoramento são carregados sob demanda. TLS/CDN/rollback vêm da plataforma após configurar o projeto. Nenhum deploy Vercel foi iniciado.
 
-```sql
-update public.profiles set role='admin',active=true where id='UUID_REAL_DA_SUA_CONTA';
-```
+A CSP permite REST/WebSocket Supabase padrão. Adicione destinos exatos se usar domínio Supabase customizado ou Sentry; não substitua por `*`. Ajuste Site URL e redirects Auth aos domínios corretos (sem wildcard de produção). Teste `/pedido`, `/pdv`, `/cozinha` e rotas restritas digitadas diretamente.
 
-Crie as contas de funcionários pelo painel Auth (não compartilhe a senha do administrador), ative-as em `/equipe` ou pelo RPC `manage_staff`. Caixa exige PIN cadastrado por admin via `set_staff_pin`. Cozinha exige setor. Não há PIN ou senha padrão. Ative MFA para administradores no Supabase antes da produção e evolua o fluxo de login para desafiar o segundo fator; a interface inicial implementa e-mail/senha, não o desafio MFA completo.
+## Funções e jobs
 
-Para desenvolvimento com toda a stack Supabase local: `supabase start` e `supabase db reset`, depois use a URL e chave anon locais em `.env.local`. O pooler local está definido em `supabase/config.toml`; a chave e URL serão as do seu CLI local, não as de produção.
+Publique as funções conforme os `verify_jwt` de `supabase/config.toml`. Funções de usuário exigem JWT e validam o usuário/perfil; checkout público exige capacidade de acompanhamento; webhook Meta valida assinatura; worker exige `X-Worker-Secret`. A ausência de JWT em webhook/worker não significa ausência de autenticação.
 
-## 3. Edge Functions e integrações
+Configure as variáveis exemplificadas em `supabase/.env.example` no painel seguro do projeto e um agendador autenticado para o worker. Não coloque segredos em migrações SQL de agendamento nem em logs. Habilitar cron/Edge/scheduling e Meta depende do projeto/conta, não foi feito localmente.
 
-`payment-intent` valida JWT e permissões pelo RPC do usuário; `provider-webhook` não usa JWT de usuário, mas exige verificação criptográfica do gateway antes de qualquer escrita. O adaptador em `supabase/functions/_shared/gateway.ts` ainda lança `PAYMENT_GATEWAY_NOT_CONFIGURED`. Isso é intencional: não há PSP nem TEF contratado/configurado. Credenciais Supabase server-side são fornecidas às funções pelo Supabase; não entram no frontend.
+## Monitoramento, recuperação e disponibilidade
 
-Depois de implementar e homologar o provedor, configure `APP_ALLOWED_ORIGINS` com os domínios exatos de staging/produção, chaves do PSP e segredos de webhook por `supabase secrets set`/painel seguro. Use credenciais de sandbox no staging. Não habilite assinatura genérica inventada: cada provedor tem algoritmo, cabeçalhos e políticas próprias. Homologue assinatura inválida, replay, timestamp vencido, moeda/recebedor incorretos, valores divergentes, duplicação, timeout e reconciliação.
+Sentry opcional usa SDK instalado, sem replay/traces/coleta padrão, e transmite só erro genérico/área. Remove usuário, URL/query strings, request/breadcrumbs e dados de formulário para não vazar tokens ou delivery. Sem DSN não envia. Configure o host exato do DSN na CSP e teste em staging antes de afirmar que está monitorando produção.
 
-Use `supabase functions deploy payment-intent` e `supabase functions deploy provider-webhook` apenas após essa configuração. As funções atuais respondem indisponibilidade de integração e não cobram. Certifique-se de que o deploy manteve os requisitos JWT de `config.toml`; tokens não substituem a RLS das RPCs.
+Error Boundaries isolam módulo e modificadores; handlers capturam erros assíncronos. Navegador offline bloqueia envios e pagamentos; disponibilidade de rede não prova que Supabase/Meta estão saudáveis. Reenvio exige a mesma chave/corpo quando o resultado é desconhecido. Bloqueio local pode ocorrer sem revogação imediata no servidor durante queda; a lease expira e não pode ser reativada por heartbeat após vencida.
 
-## 4. Hospedar frontend no Edge
-
-Importe o repositório na Vercel, escolha Vite e configure as variáveis públicas por ambiente. `vercel.json` define build, SPA rewrites e cabeçalhos de segurança; `npm ci` + `npm run build` gera `dist`. A Vercel fornece CDN, TLS e versões de deploy para rollback. Nenhum deploy foi iniciado aqui.
-
-Configure o domínio final no Supabase Auth (Site URL e redirects exatos; não wildcard em produção). A CSP permite apenas o domínio padrão `*.supabase.co` para REST/WebSocket. Se usar domínio customizado do Supabase ou Sentry, acrescente **somente os destinos exatos necessários** em `connect-src`. Evite liberar `*` ou scripts inline. A configuração deve ser validada no domínio real após deploy, inclusive rotas digitadas diretamente como `/pdv` e `/estoque`.
-
-## 5. Pooling e conexões
-
-O navegador usa REST/Realtime do Supabase, nunca uma conexão PostgreSQL direta. Para workers/server-side que precisarem de SQL, use o connection string **Transaction Pooler (Supavisor)** apresentado no painel do projeto, TLS verificado, pool pequeno (ex.: 5 por worker), timeout e limite de concorrência. Não invente hostname, porta, senha ou certificado: copie a conexão segura do projeto pelo painel. Prepared statements nomeados dependem de suporte do modo transaction e devem ser desativados no driver quando exigido pelo Supabase. Migrações usam a conexão apropriada do CLI, separada do tráfego da aplicação.
-
-`supabase/config.toml` habilita o pooler **local**, mas não muda configurações do projeto hospedado. Ajuste limite de clientes/pool conforme plano e carga observada; valide com teste de pico antes de produção. Não foi possível configurar ou medir Supavisor hospedado sem projeto.
-
-## 6. Observabilidade, backup e recuperação
-
-`reportError` recebe apenas o tipo de erro e a área, sem corpo de pedido, dados de cartão, senha, token, PIN ou e-mail. `installReporter` permite conectar Sentry (SDK opcional, não instalado/configurado nesta entrega). Configure `beforeSend`, desligue replay de sessão e gravação de inputs no PDV, restrinja ambiente/release e adicione o destino exato à CSP. Error Boundaries no workspace e modificadores impedem falhas locais de derrubar o restante da tela; boundaries não capturam eventos assíncronos, tratados nos handlers.
-
-Habilite backup/PITR conforme o plano, ensaie restauração em staging, meça consultas com índices e mantenha procedimento de rollback frontend + migração progressiva. Não faça rollback destrutivo de pagamentos para acompanhar uma versão de UI. Antes da operação real: homologar fluxo dinheiro, reconciliação, fluxo PIN/turno, RLS com contas reais, atualização de cargo, rede intermitente e KDS em dois dispositivos.
+Habilite backup/PITR conforme o plano e ensaie restauração. Não faça rollback destrutivo de dados financeiros para acompanhar uma versão antiga de UI. Use migrações compatíveis e valide a versão de frontend antes de reverter. RLS, auditoria e tokens não substituem proteção física do terminal, permissões de DBA, política LGPD, TLS, conferência de caixa ou homologação dos fornecedores.

@@ -1,6 +1,7 @@
 \set ON_ERROR_STOP on
 \o /dev/null
 begin;
+select set_config('app.audit_reason','Preparação controlada de fixtures de teste',true);
 create function pg_temp.assert(ok boolean,message text) returns void language plpgsql as $$ begin if ok is not true then raise exception 'ASSERTION FAILED: %',message; end if; end $$;
 insert into auth.users(id) values
  ('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002'),
@@ -22,10 +23,13 @@ insert into public.recipe_items values
  ('x-tudo','10000000-0000-0000-0000-000000000004',20);
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","session_id":"admin-session"}',true);
+select set_config('test.device',(public.register_terminal('Terminal de testes','Cadastro controlado para testes')->>'token'),true);
+select public.set_staff_pin('00000000-0000-0000-0000-000000000004','1010');
+select public.set_staff_pin('00000000-0000-0000-0000-000000000005','2020');
 select public.set_staff_pin('00000000-0000-0000-0000-000000000002','1234');
 select public.set_staff_pin('00000000-0000-0000-0000-000000000003','5678');
 do $$begin
- begin perform public.manage_staff('00000000-0000-0000-0000-000000000001','cashier',null,true);raise exception 'last admin must survive';exception when others then if sqlerrm<>'last_admin' then raise;end if;end;
+ begin perform public.manage_staff('00000000-0000-0000-0000-000000000001','cashier',null,true,'Teste de proteção do último administrador');raise exception 'last admin must survive';exception when others then if sqlerrm<>'last_admin' then raise;end if;end;
 end $$;
 select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","session_id":"cashier-session"}',true);
 do $$begin
@@ -35,15 +39,16 @@ do $$begin
  begin perform public.confirm_provider_payment(gen_random_uuid(),1,'r','p','e','h');raise exception 'cashier confirmed a provider payment';exception when insufficient_privilege then null;end;
  begin perform 1 from app_private.pin_credentials;raise exception 'PIN hashes leaked';exception when insufficient_privilege then null;end;
 end $$;
-select pg_temp.assert((public.unlock_terminal(null)->>'ok')::boolean=false,'NULL PIN fails closed');
-select public.unlock_terminal('0000') from generate_series(1,4);
-select pg_temp.assert((public.unlock_terminal('1234')->>'ok')::boolean=false,'PIN rate limit enforced');
+select pg_temp.assert((public.unlock_terminal(null,current_setting('test.device'))->>'ok')::boolean=false,'NULL PIN fails closed');
+select public.unlock_terminal('0000',current_setting('test.device')) from generate_series(1,4);
+select pg_temp.assert((public.unlock_terminal('1234',current_setting('test.device'))->>'ok')::boolean=false,'PIN rate limit enforced');
 reset role;
 update app_private.pin_credentials set failures=0,locked_until=null;
+update app_private.terminal_attempts set failures=0,locked_until=null;
 set local role authenticated;
-select pg_temp.assert((public.unlock_terminal('1234')->>'ok')::boolean,'correct PIN unlocks session');
+select pg_temp.assert((public.unlock_terminal('1234',current_setting('test.device'))->>'ok')::boolean,'correct PIN unlocks session');
 select pg_temp.assert((select count(*) from public.ingredients)=0,'cashier cannot read ingredient costs');
-update public.products set price_cents=1 where id='x-tudo';
+do $$begin begin update public.products set price_cents=1 where id='x-tudo';exception when insufficient_privilege then null;end;end $$;
 select pg_temp.assert((select price_cents from public.products where id='x-tudo')=1700,'cashier cannot edit prices');
 select set_config('test.shift',public.open_shift(10000)::text,true);
 select pg_temp.assert(public.open_shift(10000)=current_setting('test.shift')::uuid,'opening shift retry returns same shift');
@@ -57,6 +62,7 @@ do $$begin
 end $$;
 -- Kitchen cannot see any unpaid ticket, or any financial table at any time.
 select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000004","session_id":"grill-session"}',true);
+select public.unlock_terminal('1010',current_setting('test.device'));
 select pg_temp.assert((select count(*) from public.kitchen_tickets)=0,'unpaid order never reaches kitchen');
 select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","session_id":"cashier-session"}',true);
 select set_config('test.attempt',(public.begin_payment(current_setting('test.order')::uuid,'cash','30000000-0000-0000-0000-000000000001')).id::text,true);
@@ -70,7 +76,7 @@ select pg_temp.assert((select count(*) from public.kitchen_tickets)=2,'separate 
 select set_config('test.bar_ticket',(select id::text from public.kitchen_tickets where sector='bar'),true);
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000003","session_id":"cashier-two"}',true);
-select public.unlock_terminal('5678');
+select public.unlock_terminal('5678',current_setting('test.device'));
 select pg_temp.assert((select count(*) from public.orders)=0,'cashier cannot see other cashier orders');
 select pg_temp.assert((select count(*) from public.shifts)=0,'cashier cannot see other shifts');
 select pg_temp.assert((select count(*) from public.payment_attempts)=0,'cashier cannot see other payments');
@@ -87,6 +93,7 @@ end $$;
 select public.update_ticket((select id from public.kitchen_tickets limit 1),'preparing');
 select public.update_ticket((select id from public.kitchen_tickets limit 1),'ready');
 select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000005","session_id":"bar-session"}',true);
+select public.unlock_terminal('2020',current_setting('test.device'));
 select public.update_ticket(current_setting('test.bar_ticket')::uuid,'preparing');
 select public.update_ticket(current_setting('test.bar_ticket')::uuid,'ready');
 select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","session_id":"cashier-session"}',true);
@@ -109,8 +116,8 @@ reset role;
 select pg_temp.assert((select count(*) from public.payment_attempts where order_id=current_setting('test.pixorder')::uuid and status='confirmed')=1,'provider confirmation idempotent');
 select pg_temp.assert((select count(*) from public.kitchen_tickets where order_id=current_setting('test.pixorder')::uuid)=1,'provider payment creates a single ticket');
 set local role authenticated;
-select public.close_shift(current_setting('test.shift')::uuid,11900);
-select public.close_shift(current_setting('test.shift')::uuid,11900);
+select public.close_shift(current_setting('test.shift')::uuid,11900,'Fechamento conferido no teste');
+select public.close_shift(current_setting('test.shift')::uuid,11900,'Fechamento conferido no teste');
 select public.lock_terminal();
 select pg_temp.assert((select count(*) from public.orders)=0,'locked terminal loses DB read access');
 select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000006","session_id":"inactive"}',true);

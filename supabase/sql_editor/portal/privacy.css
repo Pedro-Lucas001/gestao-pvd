@@ -1,0 +1,75 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #101016;
+  color: #f5f3fc;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 740px;
+  margin: 5vh auto;
+  padding: 24px;
+}
+h1 {
+  font-size: clamp(28px, 6vw, 44px);
+  line-height: 1.15;
+  margin-top: 12px;
+}
+h2 {
+  font-size: 21px;
+}
+p {
+  line-height: 1.7;
+  color: #c4bdce;
+}
+.eyebrow {
+  color: #ffb927;
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  font-weight: 800;
+}
+section {
+  background: #1c1827;
+  border: 1px solid #3e3151;
+  border-radius: 16px;
+  padding: 20px;
+  margin: 24px 0;
+}
+button {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  margin: 12px 0;
+  border: 1px solid #9466e0;
+  border-radius: 10px;
+  background: #7a41c9;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button:focus-visible {
+  outline: 3px solid #ffb927;
+  outline-offset: 3px;
+}
+.danger {
+  background: #5c1e39;
+  border-color: #ae436a;
+}
+.confirm {
+  display: block;
+  line-height: 1.6;
+  margin: 24px 0 16px;
+}
+.small {
+  font-size: 13px;
+}
+#status {
+  border-left: 3px solid #ffb927;
+  padding-left: 14px;
+}

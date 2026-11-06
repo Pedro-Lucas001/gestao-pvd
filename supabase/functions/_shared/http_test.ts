@@ -37,7 +37,7 @@ Deno.test(
   "gateway is unavailable rather than fabricating approval or a PIX",
   () => {
     try {
-      gateway();
+      gateway({});
     } catch (error) {
       if (
         error instanceof Error &&

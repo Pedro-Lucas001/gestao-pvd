@@ -1,82 +1,80 @@
-# Arquitetura e limites da entrega
+# Arquitetura atual
 
-Esta entrega implementa o **Módulo 1 inicial** e as fundações dos demais módulos. React + Supabase Auth/PostgreSQL/RLS/Realtime são a stack ativa. O servidor Python/SQLite anterior não é usado por esta versão e os seus dados não são migrados nem apagados automaticamente.
+React usa Supabase Auth + PostgREST/RPC + Realtime. Python/SQLite anterior não participa da operação ativa. Custos, estoque, auditoria e contatos são protegidos no banco, independentemente de menu/rota no navegador.
 
 ```mermaid
 flowchart LR
-  POS[React: PDV / caixa] -->|JWT de operador| Auth[Supabase Auth]
-  POS -->|RPC + chave idempotente| DB[(PostgreSQL + RLS)]
-  DB -->|tickets sem preços| RT[Supabase Realtime]
-  RT --> KDS[React: KDS por setor]
-  POS --> Edge[Edge Function: payment-intent]
-  Edge -. adaptador pendente .-> Provider[PSP Pix / agente TEF]
-  Provider -. assinatura + confirmação .-> Webhook[provider-webhook]
-  Webhook -->|service_role somente no servidor| DB
-  DB --> Outbox[Outbox de eventos]
-  Outbox -. worker futuro .-> WhatsApp[WhatsApp / notificações]
+  POS[PDV / caixa individual] -->|JWT + PIN / lease| RPC[RPCs transacionais + RLS]
+  Customer[QR mesa / delivery] -->|link + chave de acompanhamento| Checkout[Checkout público limitado]
+  Checkout --> RPC
+  RPC --> DB[(PostgreSQL)]
+  DB -->|somente tickets sanitizados| RT[Realtime]
+  RT --> KDS[KDS por setor]
+  POS --> Pix[Edge: QR estático com valor]
+  Pix --> Nubank[Cliente paga no app bancário]
+  Admin[Admin confere extrato] -->|referência única + motivo| RPC
+  DB --> Audit[Audit trail append-only]
+  DB --> Outbox[Outbox com lease / retry]
+  Outbox --> Worker[Worker autenticado]
+  Worker -. requer API oficial .-> Meta[WhatsApp Cloud API]
 ```
 
-## Fronteiras e módulos
+## Módulos e fronteiras
 
-- **PDV:** imagens ilustrativas locais, busca, categorias (combos vazios até cadastro real), quantidades, modificadores inline, observações por item, turno próprio, total calculado no PostgreSQL. Rascunho e chaves de tentativa em sessionStorage por operador. Pedidos pendentes podem ser consultados/retomados do banco pelo próprio caixa; pedidos sem cobrança iniciada podem ser cancelados por comando explícito. O nome do cliente fica apenas nesse terminal até o envio; sair remove o rascunho. Não armazenar dados de cartões.
-- **KDS inicial:** tickets por setor, somente depois do pagamento; reconexão automática do cliente Supabase, nova consulta ao reconectar, atualização por evento e polling a cada 10 s como fallback. Não é uma garantia de entrega exatamente uma vez do WebSocket: a consulta ao banco é a fonte da verdade. Verde <8 min, amarelo >=8 min, vermelho >=15 min. Os limites são uma configuração inicial, não métricas observadas da loja.
-- **Back-office:** tabelas de ingredientes, fichas, movimentos imutáveis de venda e queries em `analytics.sql`. As telas são explicitamente fundações, não dashboards operacionais completos. Custos ficam fora do catálogo do caixa e dos tickets. Contas são criadas pelo Supabase Auth; administração de perfis e PINs pelo RPC/admin. Reembolsos, edição de vendas finalizadas e gestão completa de estoque precisam de comandos administrativos auditados próprios; não há uma API de reembolso simulada.
-- **Autoatendimento:** contrato futuro abaixo. Não há rota pública com privilégio de criar pedidos nesta entrega. Dar `INSERT` a `anon` para acelerar o desenvolvimento violaria o isolamento.
+**PDV:** produtos do banco, modificadores/observações por item, turno, contagem física, sangria/suprimento, fechamento com justificativa, total calculado pelo PostgreSQL, retomada de pedidos e cobrança. Dinheiro é confirmado pelo operador. Pix Nubank PF exige confirmação do administrador. TEF não processa enquanto não houver maquininha/serviço homologado.
+
+**KDS:** recebe só tickets de setores autorizados depois do pagamento confirmado. Nome de contato vira `Pedido #N`; não existem preços, telefone, e-mail ou endereço no ticket. Estado/cores: fila, preparo, pronto; verde até 8 min, amarelo a partir de 8 e vermelho a partir de 15. Realtime reconecta e faz nova consulta; polling de 10 s reduz o impacto de eventos perdidos. Ao bloquear o terminal, o componente desmonta e remove a assinatura.
+
+**Back-office:** produtos/receitas/insumos são editados por RPC auditada; alterações diretas pelo REST não têm permissão. Receita define consumo padrão; regras por modificador somam/subtraem quantidade de ingrediente. Consumo nunca fica negativo; revise regras sobrepostas. A liberação do pedido bloqueia produtos e insumos em ordem estável e grava movimentos únicos por venda/ingrediente. Pagamento não é apagado por saldo negativo: relatórios alertam a ruptura. Reservas preditivas/compra automática não são implementadas. Margens são estimativas de receita/custo padrão atual, não apuração contábil com impostos/taxas.
+
+**Autoatendimento:** admin cria link com expiração e token de 256 bits, armazenado como hash no banco. Catálogo não expõe custos. Pedido recebe outro token aleatório de acompanhamento; o status revela apenas aquela cobrança/pedido, sem contatos. Há limite de pedidos por link, validação de preço/modificador no banco e idempotência. Pix/atendimento no caixa deve ser resolvido antes da cozinha. O token de mesa permite criar pedidos pendentes, não ler a base de clientes.
+
+**Delivery:** dados privados separados; só admin e caixa atribuído ao pedido pago/ativo conseguem ler. Assumir atendimento exige turno aberto e gera auditoria. Despacho/entrega emitem eventos; contato deixa de aparecer ao funcionário após encerramento. Área/condições de entrega e taxas comerciais devem ser cadastradas/comunicadas pela loja antes de divulgar links; não inferimos preços de frete.
+
+**WhatsApp:** implementação para API oficial (texto): desafio GET, HMAC-SHA256 do corpo bruto, validação do número comercial, deduplicação por ID, FAQ determinístico, inbox privado, atribuição e resposta de operador. Mensagens de mídia não são processadas pelo bot. Notificações por status exigem consentimento e janela/template aprovado. Usar apenas o aplicativo Business não habilita esses endpoints. Credenciais e configuração externa ainda são necessárias.
 
 ## Modelo relacional
 
 ```mermaid
 erDiagram
-  profiles ||--o{ shifts : abre
-  profiles ||--o{ orders : registra
-  shifts ||--o{ orders : agrupa
-  orders ||--|{ order_items : contem
-  products ||--o{ order_items : referencia
-  products ||--o{ recipe_items : compoe
-  ingredients ||--o{ recipe_items : integra
-  orders ||--o{ payment_attempts : cobra
-  orders ||--o{ kitchen_tickets : roteia
-  orders ||--o{ stock_movements : baixa
-  orders ||--o{ integration_outbox : publica
+ profiles ||--o{ shifts : abre
+ profiles ||--o{ orders : registra
+ terminals ||--o{ terminal_leases : autoriza
+ shifts ||--o{ cash_movements : movimenta
+ shifts ||--o{ orders : agrupa
+ orders ||--|{ order_items : contem
+ products ||--o{ order_items : referencia
+ products ||--o{ recipe_items : compoe
+ products ||--o{ recipe_modifier_rules : modifica
+ ingredients ||--o{ recipe_items : integra
+ ingredients ||--o{ inventory_adjustments : ajusta
+ orders ||--o{ payment_attempts : cobra
+ payment_attempts ||--o| refunds : estorna
+ orders ||--o{ kitchen_tickets : roteia
+ orders ||--o{ stock_movements : baixa
+ orders ||--o| customer_contacts : protege
+ order_links ||--o{ order_tracking : inicia
+ orders ||--o{ integration_outbox : notifica
 ```
 
-`profiles.id` referencia `auth.users`. Novas contas são **inativas e caixa**, independentemente de metadata enviada no cadastro. Só admin altera papel/setor/acesso com `manage_staff`; a função preserva ao menos um admin ativo e revoga leases de PIN. Definers têm search_path vazio, nomes qualificados, grants explícitos e não aceitam um `cashier_id` do navegador. Definers privados, credenciais PIN e eventos de webhook não são expostos no PostgREST.
+Schemas privados guardam hashes dos terminais/PINs, tentativas, leases, tokens de links/acompanhamento, códigos de cobrança e jobs de mensagens. Não são expostos ao PostgREST. Triggers/definers usam `search_path=''`, nomes qualificados e grants explícitos. Novas funções não herdam EXECUTE público amplo.
 
-| Identidade | Leituras e comandos |
+## Consistência e reenvio
+
+`create_order` soma preços canônicos em centavos, valida produtos/modificadores e não aceita preço do cliente. UUID de idempotência é único; corpo/pessoa divergente com a mesma chave é rejeitado. Falha de resultado desconhecido mantém rascunho e mesma chave. Comandos de ajuste/sangria/refund também preservam tentativa no terminal; não criar outra cobrança para resolver um timeout.
+
+Confirmação financeira, baixa, tickets e outbox são atômicos. Nenhum ticket é criado apenas porque um QR foi exibido. Referência Pix manual é normalizada e única entre pagamentos, inclusive depois de estorno. Estorno é integral nesta versão; devolução física/bancária é conferida e registrada pelo admin. Não há reposição automática de alimentos estornados.
+
+Fila usa `FOR UPDATE SKIP LOCKED`, lease de 2 min, backoff e limite de 8 falhas. Worker exige segredo server-side. Meta não fornece idempotência geral de envio: timeout após aceite pode duplicar notificação; isso não duplica pedido/pagamento/ticket. A interface avisa para conferir a conversa antes de reenviar uma resposta com resultado desconhecido.
+
+## Perfis
+
+| Perfil | Acesso |
 | --- | --- |
-| Anônimo | Nenhuma tabela de operação nem RPC de escrita. A prévia usa catálogo estático local e não simula transações. |
-| Caixa ativo | Catálogo sem custos; com lease de PIN: próprio turno, próprios pedidos/itens/pagamentos; RPCs de operação. Sem visão de outro caixa. |
-| Cozinha ativa | Apenas tickets do setor, sem preço, total, forma de pagamento ou custos; transições válidas do seu setor. |
-| Admin ativo | Leitura de todas as tabelas operacionais; edição de catálogo/ingredientes/fichas; comandos explícitos. Não pode escrever arbitrariamente em registros financeiros imutáveis. |
-| Service role | Servidor confiável para confirmação de PSP após verificação. Nunca no navegador, Vite ou preview. |
+| Anônimo | Catálogo/pedido/status por capacidade de link/acompanhamento; nenhuma tabela operacional ou contato |
+| Caixa | PDV, próprio caixa/pedidos e atendimento atribuído; sem custos, descontos, estornos, analytics ou auditoria |
+| Cozinha | KDS do setor com lease válida; nenhum valor ou contato |
+| Admin | Gestão, ações autorizadas com motivo e leitura de auditoria; sem edição/exclusão de logs |
+| Integração | RPCs mínimas; service role não recebe escrita livre nos registros financeiros/auditoria |
 
-A proteção de rotas impede renderizar `/dashboard`, `/estoque`, `/relatorios`, `/equipe` a funcionários; `/pdv` só admin/caixa e `/cozinha` só admin/cozinha. RLS e grants continuam impedindo acessos diretos. Uma eventual URL digitada não muda o papel.
-
-## PIN e terminais
-
-E-mail/senha é a identidade primária do Supabase. PIN de quatro dígitos **não autentica uma nova pessoa**, nem troca o admin silenciosamente por um funcionário. Cada operador entra em sua conta e destrava seu próprio PDV. O hash bcrypt fica em schema privado; 5 erros geram bloqueio de 5 min, por usuário (não contornável trocando de aba/IP). Leases duram 15 min e são vinculados ao `session_id` do JWT. Bloquear revoga a lease no servidor quando a conexão permite confirmar o comando. Se a chamada falhar, a UI bloqueia localmente e avisa que a revogação no servidor não foi confirmada; a lease anterior expira em até 15 min. Alteração de PIN/papel também revoga. O banco valida a expiração mesmo com relógio local adulterado.
-
-Supabase é responsável por senha, refresh tokens e validade do JWT. Ative MFA para administradores como etapa de produção. Para troca instantânea entre identidades sem senha em dispositivos compartilhados, será necessário um broker de terminais com credencial de dispositivo, registros de auditoria e tokens curtos; não é seguro converter um PIN de 4 dígitos em login público.
-
-## Pagamentos, concorrência e quedas
-
-1. `create_order` valida produtos ativos, quantidades e modificadores; busca preços na tabela, ignora preços enviados pelo cliente e soma em centavos. Lock de turno e de produtos protege concorrência com fechamento/alteração de preço.
-2. Chave UUID de idempotência persiste no rascunho e é única no banco. Repetir mesmo corpo retorna o pedido existente; outro corpo/pessoa com a mesma chave é rejeitado. Em timeout de resultado desconhecido, os itens ficam congelados e o botão reenvia **a mesma tentativa**. Rejeições transacionais conhecidas permitem corrigir o rascunho.
-3. Dinheiro: uma tentativa identifica o recebimento que o operador confirma manualmente. Confirmação é idempotente; nenhum valor digitado substitui o total. A tela de abertura/fechamento recebe apenas contagem de caixa, não valor de compra.
-4. Pix/TEF: Edge Functions e contratos prontos, **adaptador não contratado/configurado**. Falham fechadas com 503 antes de criar cobrança. Não geram QR, aprovação TEF ou pagamento fictícios. QR só é renderizado para um `copyPaste` real do provedor.
-5. Adaptador futuro usa valor persistido e UUID da tentativa como idempotency key no PSP. Webhook verifica assinatura nos bytes brutos, timestamp, conta recebedora e moeda, resolve identificador do PSP e consulta status canônico. Só depois chama `confirm_provider_payment`, restrito a service_role. Valor/duplicação/referência/evento são verificados no banco. Pagamento não pode ser confirmado por `paid=true` do frontend.
-6. Confirmação e liberação para cozinha, baixa de estoque e outbox acontecem numa transação. Os setores recebem somente seus itens. Baixa por ficha ocorre uma vez. Saldo negativo reflete uma venda efetivamente paga; não se apaga uma confirmação financeira por ruptura. A consulta de baixos estoques identifica o problema. Reserva preventiva de insumos, substituições e bloqueio de produtos em ruptura são próximos passos antes de operar controle de estoque em produção.
-7. O indicador de rede usa o navegador: rede disponível **não prova** que Supabase/PSP está acessível. Falhas das operações são exibidas, rascunho é preservado e retries são explícitos; nunca se repete uma cobrança sem chave. Não há fila offline que considere um pedido pago sem resposta do servidor.
-
-**Ficha técnica:** a baixa inicial usa a receita padrão; “sem cebola” não altera automaticamente a ficha. Antes de usar estoque para planejamento, modelar diferenças de ingrediente por modificador. Não cadastramos receitas/estoques/custos inventados: os 20 g de milho do exemplo existem apenas nos testes de transação.
-
-## Entradas automáticas e contratos futuros
-
-- `POST /self-service/order`: Edge Function pública com catálogo seguro, token assinado de mesa/loja com expiração, limitação por IP/dispositivo e idempotência. O banco calcula total; aguarda pagamento antes de emitir ticket. Usar RPC própria, não impersonar um caixa do balcão com service_role.
-- `POST /whatsapp/webhook`: validar desafio e assinatura da Meta nos bytes brutos, deduplicar ID da mensagem, validar origem/loja e inserir comando. Nunca executar instruções recebidas como SQL/ações administrativas.
-- `integration_outbox`: consumidor futuro com `FOR UPDATE SKIP LOCKED`, envio com chave idempotente, retry exponencial + jitter, dead-letter após limite. Não adicionar tokens/telefone no evento de Realtime. Não existe worker enviando mensagens nesta entrega.
-- TEF depende de agente/terminal homologado e rede/acesso do estabelecimento; navegador não acessa diretamente um PIN pad genérico. Dados sensíveis do cartão permanecem com o adquirente/terminal.
-
-## Validação e limites
-
-Testes SQL usam PostgreSQL real com roles `anon`, `authenticated` e `service_role` e stubs apenas do contrato `auth.uid/auth.jwt`. Validam RLS e lógica transacional; não comprovam Auth hospedado, push Realtime em rede, gateway financeiro, implantação Edge nem um Supabase remoto. Esses exigem projeto e serviços reais. Ver `deploy.md` para ativação e `tests/README.md` para comandos.
+Ver [security.md](security.md) para limites de DDL/DBA, PIN 5/180 s, auto-lock de 10 min e LGPD. [activation.md](activation.md) distingue configuração disponível de integração realmente homologada.

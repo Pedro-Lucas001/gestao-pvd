@@ -1,0 +1,121 @@
+/* Tailwind opt-in: o prefixo evita colisões com classes das telas existentes.
+   Sem preflight: não altera resets nem formulários de administração/autenticação. */
+@import "tailwindcss/theme.css" layer(theme) prefix(pl);
+@import "tailwindcss/utilities.css" layer(utilities) prefix(pl) important;
+
+.pl-pdv,
+.pl-kds {
+  --operation-page: #1a1a1a;
+  --operation-panel: #2d2d2d;
+  --operation-primary: #ff5722;
+}
+.pl-pdv *,
+.pl-kds * {
+  box-sizing: border-box;
+}
+.pl-pdv button,
+.pl-kds button {
+  touch-action: manipulation;
+}
+.pl-pdv [data-product-card]:hover:not(:disabled) {
+  transform: none;
+}
+.pl-payment-body .payment-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-block: 16px;
+}
+.pl-payment-body .payment-options button {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 12px;
+  background: #2d2d2d;
+  border: 1px solid #374151;
+  color: #d1d5db;
+  font-size: 12px;
+}
+.pl-payment-body .payment-options button.active {
+  color: #ff5722;
+  background: #ff572215;
+  border-color: #ff5722;
+}
+.pl-payment-body .field-note,
+.pl-payment-body .payment-disclaimer {
+  margin-top: 12px;
+  color: #9ca3af;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.pl-payment-body .field-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.pl-payment-body .field-note svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.pl-payment-body .payment-success {
+  background: #2d2d2d;
+  border: 1px solid #ff5722;
+  border-radius: 12px;
+  padding: 16px;
+  color: #f3f4f6;
+}
+.pl-payment-body .payment-success > svg {
+  color: #ff5722;
+}
+.pl-payment-body .payment-success h3 {
+  margin-block: 10px;
+  font-size: 18px;
+}
+.pl-payment-body .payment-success p {
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+.pl-payment-body .pix-code {
+  background: #2d2d2d;
+  border-radius: 12px;
+  padding: 16px;
+}
+.pl-payment-body .pix-code > svg {
+  background: white;
+  padding: 10px;
+  box-sizing: content-box;
+  border-radius: 8px;
+}
+.pl-payment-body .pix-code code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #d1d5db;
+}
+.pl-payment-body .error-message {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.pl-kds .demand-panel,
+.pl-pdv .demand-panel {
+  background: #2d2d2d;
+  border-radius: 12px;
+}
+.pl-kds .station-load,
+.pl-pdv .station-load {
+  background: #1a1a1a;
+  border-radius: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pl-pdv *,
+  .pl-kds * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

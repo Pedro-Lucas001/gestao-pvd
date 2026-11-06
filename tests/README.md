@@ -1,50 +1,52 @@
-# Validação da versão Supabase
+# Validação
 
 ## Frontend
 
+`npm run validate`: ESLint, testes Node e build Vite. Verificam centavos sem valores ambíguos, modificadores exclusivos, chaves/corpo de retry sem preço vindo do cliente, limiares KDS, matriz de rotas, normalização de RPC, 10 min de inatividade com relógio monotônico e abort de requisição sem perder headers de autenticação.
+
+## PostgreSQL real / RLS / auditoria
+
+`npm run test:db` exige Docker local. Sobe PostgreSQL 17 Alpine descartável sem portas publicadas, aplica todas as migrations/seed e duas suites SQL, removendo o container ao final. Não usa banco/credenciais da loja. `supabase/tests/bootstrap.sql` é apenas fixture de Auth para PostgreSQL vazio; nunca aplicar em Supabase real.
+
+`rls.sql` cobre: autoescalada de cargo, grants mínimos, custos/financeiro invisíveis à cozinha, isolamento entre caixas/setores, PIN, cadastro de terminal, total canônico mesmo com preço adulterado, idempotência, gate de pagamento, fichas e baixa única, transições, fechamento e eventos de PSP (apenas contrato SQL).
+
+`advanced.sql` cobre: logs imutáveis para admin/service/dono em DML normal, justificativas/valores/quantidades automáticas, cinco erros em contas diferentes no mesmo terminal e lockout exato de 180 s, terminal forjado negado, lease expirada sem revive por heartbeat, QR público e tracking sem contatos, privacidade RLS de delivery antes/depois da atribuição/pagamento/entrega, descontos, sangria idempotente, receita por modificador, relatório, Pix manual/refund, referência bancária única normalizada, crédito tardio sem reabrir KDS e anonimização.
+
+Asserções falsas e erros inesperados preservam exit status de falha. Os testes usam roles reais `anon/authenticated/service_role`, mas **não** simulam a validação criptográfica hospedada do Supabase Auth: `auth.uid/auth.jwt` são fixtures locais. Não são homologação do PostgREST/Realtime hospedado ou teste de carga de pico.
+
+## Funções
+
 ```sh
-npm run validate
+deno check supabase/functions/*/index.ts
+deno test supabase/functions/_shared/*_test.ts
 ```
 
-Executa ESLint, seis testes de regras puras com o runner nativo Node e build Vite. Os testes verificam centavos sem valores ambíguos, pontos de carne mutuamente exclusivos, idempotency key/corpo sem preço enviado pelo cliente, limites de cores do KDS e matriz de acesso às rotas e respostas de RPC sem ambiguidade.
+Testam corpo bruto e limite de payload, gateway sem configuração recusado, BR Code estático (valor/CRC/campos), nenhuma aprovação bancária falsa, TEF indisponível, HMAC correto/alterado/ausente e FAQ determinístico. Chaves/emails de teste não são credenciais reais. Nenhum Pix, estorno, mensagem ou deploy real é executado.
 
-## PostgreSQL / RLS
+## Navegador
 
-```sh
-npm run test:db
-```
-
-Requer Docker local e baixa a imagem oficial PostgreSQL 17 Alpine. Cria um banco **descartável**, sem portas publicadas, sem volumes e sem dados reais, e o remove ao terminar. Não aceita `DATABASE_URL` de produção. `supabase/tests/bootstrap.sql` é apenas um fixture local do contrato de Auth; **nunca aplicar esse arquivo em Supabase real**.
-
-Aplica migration e seed e testa com `SET ROLE authenticated/anon/service_role`: autoescalada de cargo negada, dados financeiros invisíveis à cozinha, custos invisíveis ao caixa, isolamento entre caixas e setores, PIN nulo/incorreto/bloqueio, lease de sessão, total no banco mesmo com preço adulterado, retry sem duplicação, exclusões/modificadores, dinheiro, validação de valor Pix no contrato SQL, eventos repetidos/alterados, baixa por ficha uma única vez, transições de tickets, conclusão e fechamento de caixa idempotentes. Exceções inesperadas ou qualquer asserção falsa falham o comando.
-
-Isso testa PostgreSQL real, **não** a implementação completa do Supabase Auth, o PostgREST hospedado, WebSockets em rede ou um gateway financeiro.
-
-## Navegador (opcional)
-
-Com Playwright Python e Chromium instalados:
+Com Playwright Python e Chromium:
 
 ```sh
 python3 tests/ui_smoke.py
 ```
 
-Inicia Vite em portas descartáveis. Exercita a prévia real e, em seguida, usa **Auth/REST simulados explicitamente** para validar roteamento por cargo, bloqueio offline, retenção do corpo/chave após falha e a tela de pagamento em dinheiro. A segurança dessas simulações não substitui os testes RLS. As capturas são salvas em `/tmp/planeta-pdv-desktop.png` e `/tmp/planeta-pdv-mobile.png`. `CHROMIUM_PATH` seleciona outro executável.
+Inicia Vite em portas descartáveis e valida a prévia e Auth/REST **explicitamente simulados**. Verifica 47 produtos, modificadores inline, celular, bloqueio offline, retry com mesmo corpo/chave, pagamento dinheiro, auto-lock em 10 min, ausência do formulário sensível atrás do bloqueio, PIN para retomar, persistência do bloqueio de admin após reload, redirecionamento por cargo e checkout público que não marca Pix indisponível como pago. Capturas em `/tmp/planeta-pdv-desktop.png`, `/tmp/planeta-pdv-mobile.png` e `/tmp/planeta-idle-lock.png`.
 
-## Edge Functions
+## Ainda exige serviços reais
 
-Com Deno instalado:
+Aplicar/homologar staging Supabase com JWTs reais, Realtime entre terminais, pooler/plano, Vercel/TLS/CSP, QR e conta Nubank real com conferência de crédito/devolução, API Meta/número/permissões/templates/janela, cron autenticado e restauração de backup. Sentry precisa de DSN/domínio. TEF precisa de equipamento/serviço homologado. Esses resultados não são declarados aprovados por mocks ou testes locais.
 
-```sh
-deno check supabase/functions/payment-intent/index.ts supabase/functions/provider-webhook/index.ts
-deno test supabase/functions/_shared/http_test.ts
-```
+`test_server.py/test_menu.py` são do histórico Python/SQLite e catálogo estático, não o backend ativo.
 
-Verifica tipos/imports e três testes de integridade do corpo bruto, limite de payload e gateway fail-closed. Nenhum deploy ou pagamento é executado. Os adaptadores falham fechados enquanto não houver integração real.
+## Contrato independente do SQL Editor
 
-## Histórico
+`bash scripts/test-sql-editor.sh` cria um PostgreSQL descartável separado para os scripts em português, sem misturar com as migrações do frontend em inglês. Testa o esquema base e as partes 5/6, inclusive pagamento antes do KDS, fidelidade, consentimento e direitos do titular.
 
-`test_server.py` e `test_menu.py` são testes da versão anterior Python/SQLite e catálogo estático. Foram mantidos como referência; não são a validação de backend da stack atual.
+`python3 tests/privacy_portal_smoke.py` usa Playwright/Chromium e API simulada para validar token no fragmento, ausência de sessão de funcionário/localStorage, download pessoal, confirmação de exclusão e tamanho móvel. Não conecta ao Supabase real e não envia mensagens nem pagamentos.
 
-## Ainda exige projeto real
+## Login touch e KDS tático
 
-Homologar Supabase Auth com contas reais, leases com JWT emitido pelo serviço, migrations/seed em staging, streaming Realtime/reconexão entre dois terminais, pooler hospedado e limites do plano, deploy Vercel com SPA/CSP, Pix sandbox, TEF homologado, assinatura/replay e reconciliação dos webhooks. Esses itens não foram declarados aprovados por testes locais.
+`python3 tests/tactical_ui_smoke.py` exercita numpad, limpeza/backspace, feedback de bloqueio, Fast-Pass com sessão Auth simulada, redirecionamentos, ausência de menu admin para funcionários, filtros e cores do KDS. O teste implementa um servidor WebSocket Phoenix simulado para verificar que eventos do Supabase causam uma nova consulta e exibem cartões/contagens sem reload. Também valida a troca de cor pelo relógio e layout móvel. Não é uma homologação do Supabase hospedado.
+
+`supabase/tests/tactical.sql`, executado por `npm run test:db`, cobre PIN único, lockout compartilhado, prova descartável de sessão, bloqueio de promoção de sessão por PIN, carga real das praças, média ponderada e custo capturado da DRE em PostgreSQL descartável.

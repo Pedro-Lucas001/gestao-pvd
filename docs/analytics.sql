@@ -4,7 +4,7 @@
 
 -- Peaks by local weekday and hour, based on paid orders.
 select extract(isodow from paid_at at time zone 'America/Recife') weekday,
-       extract(hour from paid_at at time zone 'America/Recife') hour,
+       extract(hour from paid_at at time zone 'America/Recife') as "hour",
        count(*) orders, sum(total_cents) revenue_cents
 from public.orders where paid_at is not null and status<>'cancelled'
 group by 1,2 order by 1,2;

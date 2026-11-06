@@ -1,35 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  Plus,
-  Minus,
-  Trash2,
-  Search,
-  ShoppingBasket,
-  ArrowRight,
-  LockKeyhole,
-  WifiOff,
-  Check,
-  RotateCcw,
-  Banknote,
-  Smartphone,
-  CreditCard,
-  Clock3,
-} from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { ArrowRight, Banknote, LockKeyhole, WifiOff } from "lucide-react";
 import sourceMenu from "../data/menu.json";
 import { useAuth } from "../auth/context";
-import { supabase, rpc } from "../lib/supabase";
+import { rpc, supabase } from "../lib/supabase";
 import {
+  cents,
+  emptyDraft,
   money,
   normalize,
-  cents,
-  toggleModifier,
-  emptyDraft,
   orderPayload,
 } from "../lib/operations";
 import { useConnection } from "../components/useConnection";
 import { reportError } from "../lib/monitoring";
-import ErrorBoundary from "../components/ErrorBoundary";
+import CashDrawer from "./CashDrawer";
+import DemandPanel from "../kds/DemandPanel";
+import PdvTemplate from "./PdvTemplate";
+import PaymentActions from "./PaymentActions";
 const categories = [
   ["all", "Todos"],
   ["hamburgueres", "Hambúrgueres"],
@@ -45,20 +31,19 @@ const previewProducts = sourceMenu.map((p) => ({
   ...p,
   price_cents: p.price,
   image_path: `/menu/${p.category}.svg`,
-  allowed_modifiers:
-    p.category === "hamburgueres"
-      ? [
-          "Sem cebola",
-          "Sem tomate",
-          "Sem alface",
-          "Sem molhos",
-          "Ponto: mal passado",
-          "Ponto: ao ponto",
-          "Ponto: bem passado",
-        ]
-      : p.category === "dogoes"
-        ? ["Sem cebola", "Sem molhos"]
-        : [],
+  allowed_modifiers: p.category === "hamburgueres"
+    ? [
+      "Sem cebola",
+      "Sem tomate",
+      "Sem alface",
+      "Sem molhos",
+      "Ponto: mal passado",
+      "Ponto: ao ponto",
+      "Ponto: bem passado",
+    ]
+    : p.category === "dogoes"
+    ? ["Sem cebola", "Sem molhos"]
+    : [],
 }));
 function restore(user) {
   try {
@@ -75,7 +60,7 @@ export default function PDV({ preview = false }) {
   const [products, setProducts] = useState(preview ? previewProducts : []),
     [catalogError, setCatalogError] = useState("");
   const [draft, setDraft] = useState(() =>
-    restore(preview ? "preview" : profile.id),
+    restore(preview ? "preview" : profile.id)
   );
   const [selected, setSelected] = useState(null),
     [category, setCategory] = useState("all"),
@@ -88,6 +73,7 @@ export default function PDV({ preview = false }) {
     [error, setError] = useState(""),
     [pin, setPin] = useState(""),
     [closing, setClosing] = useState(false);
+  const [closingReason, setClosingReason] = useState("");
   const [paymentIntent, setPaymentIntent] = useState(null);
   const [pendingOrders, setPendingOrders] = useState(null);
   const userId = preview ? "preview" : profile.id;
@@ -108,7 +94,7 @@ export default function PDV({ preview = false }) {
         supabase
           .from("products")
           .select(
-            "id,name,category,description,price_cents,image_path,allowed_modifiers",
+            "id,name,category,sector,description,price_cents,image_path,allowed_modifiers",
           )
           .eq("active", true)
           .order("category")
@@ -120,8 +106,9 @@ export default function PDV({ preview = false }) {
           .is("closed_at", null)
           .maybeSingle(),
       ]);
-      if (catalog.error || turns.error)
+      if (catalog.error || turns.error) {
         throw new Error("Não foi possível sincronizar produtos e caixa.");
+      }
       setProducts(catalog.data);
       setShift(turns.data);
     } catch (e) {
@@ -158,12 +145,12 @@ export default function PDV({ preview = false }) {
     const line = found
       ? { ...found, quantity: Math.min(100, found.quantity + 1) }
       : {
-          ...product,
-          lineId: crypto.randomUUID(),
-          quantity: 1,
-          modifiers: [],
-          notes: "",
-        };
+        ...product,
+        lineId: crypto.randomUUID(),
+        quantity: 1,
+        modifiers: [],
+        notes: "",
+      };
     setDraft({
       ...draft,
       items: found
@@ -172,7 +159,7 @@ export default function PDV({ preview = false }) {
     });
     setSelected(line.lineId);
     setError("");
-    if (window.innerWidth <= 740)
+    if (window.innerWidth <= 740) {
       setTimeout(
         () =>
           document
@@ -180,6 +167,7 @@ export default function PDV({ preview = false }) {
             ?.scrollIntoView({ behavior: "smooth", block: "start" }),
         0,
       );
+    }
   }
   function update(lineId, change) {
     if (frozen) return;
@@ -220,11 +208,12 @@ export default function PDV({ preview = false }) {
       if (e.rejected) {
         setDraft((prev) => ({ ...prev, submitted: false }));
         setError(e.message);
-      } else
+      } else {
         setError(
           e.message +
             " O pedido foi preservado: use “Reenviar mesma tentativa”.",
         );
+      }
       reportError(e, "create_order");
     } finally {
       setBusy(false);
@@ -266,8 +255,9 @@ export default function PDV({ preview = false }) {
           try {
             const body = await failure.context.json();
             message = body.error || message;
-            if (failure.context.status === 503)
+            if (failure.context.status === 503) {
               setDraft((prev) => ({ ...prev, payment: null }));
+            }
           } catch {
             /* Preserve attempt when the response cannot be read. */
           }
@@ -289,8 +279,9 @@ export default function PDV({ preview = false }) {
       draft.payment?.status === "confirmed" ||
       draft.order.status === "cancelled" ||
       locked
-    )
+    ) {
       return;
+    }
     let stopped = false;
     const check = async () => {
       const { data } = await supabase
@@ -302,14 +293,15 @@ export default function PDV({ preview = false }) {
         !stopped &&
         data &&
         ["queued", "preparing", "ready", "completed"].includes(data.status)
-      )
+      ) {
         setDraft((prev) => ({
           ...prev,
           order: { ...prev.order, ...data },
           payment: { ...prev.payment, status: "confirmed" },
         }));
-      else if (!stopped && data?.status === "cancelled")
+      } else if (!stopped && data?.status === "cancelled") {
         setDraft((prev) => ({ ...prev, order: { ...prev.order, ...data } }));
+      }
     };
     const timer = setInterval(check, 4000);
     return () => {
@@ -335,8 +327,9 @@ export default function PDV({ preview = false }) {
       !confirm(
         "Abrir este pedido? O rascunho atual será substituído. Pedidos já enviados permanecem no banco.",
       )
-    )
+    ) {
       return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -352,8 +345,9 @@ export default function PDV({ preview = false }) {
           .eq("status", "pending")
           .maybeSingle(),
       ]);
-      if (lines.error || attempts.error)
+      if (lines.error || attempts.error) {
         throw new Error("Não foi possível retomar o pedido.");
+      }
       const payment = attempts.data
         ? { method: attempts.data.method, key: attempts.data.id }
         : null;
@@ -372,8 +366,9 @@ export default function PDV({ preview = false }) {
           modifiers: i.modifiers,
           notes: i.notes,
           lineId: crypto.randomUUID(),
-          allowed_modifiers:
-            products.find((p) => p.id === i.product_id)?.allowed_modifiers ||
+          allowed_modifiers: products.find((p) =>
+            p.id === i.product_id
+          )?.allowed_modifiers ||
             [],
         })),
         payment,
@@ -392,7 +387,10 @@ export default function PDV({ preview = false }) {
     setBusy(true);
     setError("");
     try {
-      await rpc("cancel_unpaid_order", { p_order: draft.order.id });
+      await rpc("cancel_unpaid_order", {
+        p_order: draft.order.id,
+        p_reason: prompt("Justificativa do cancelamento:") || "",
+      });
       setDraft((prev) => ({
         ...prev,
         order: { ...prev.order, status: "cancelled" },
@@ -413,6 +411,7 @@ export default function PDV({ preview = false }) {
         await rpc("close_shift", {
           p_shift: shift.id,
           p_counted_cents: cents(shiftValue),
+          p_reason: closingReason,
         });
         setClosing(false);
       } else await rpc("open_shift", { p_opening_cents: cents(shiftValue) });
@@ -423,7 +422,7 @@ export default function PDV({ preview = false }) {
       setBusy(false);
     }
   }
-  if (!preview && locked)
+  if (!preview && locked) {
     return (
       <section className="terminal-lock">
         <LockKeyhole size={34} />
@@ -477,57 +476,93 @@ export default function PDV({ preview = false }) {
         </small>
       </section>
     );
-  if (!preview && (loadingShift || (!shift && !catalogError)))
-    return loadingShift ? (
-      <div className="loading">Sincronizando caixa…</div>
-    ) : (
-      <section className="terminal-lock">
-        <Banknote size={35} />
-        <span className="eyebrow">COMEÇAR O TURNO</span>
-        <h1>Vamos abrir seu caixa?</h1>
-        <p>
-          Informe o fundo de troco. Esse valor não altera o preço dos pedidos.
-        </p>
-        <form onSubmit={shiftAction}>
-          <label>
-            Fundo de troco (R$)
-            <input
-              inputMode="decimal"
-              required
-              value={shiftValue}
-              onChange={(e) => setShiftValue(e.target.value)}
-            />
-          </label>
-          {error && (
-            <p role="alert" className="error-message">
-              {error}
-            </p>
-          )}
-          <button className="primary full" disabled={!online || busy}>
-            Abrir meu caixa
-            <ArrowRight size={17} />
-          </button>
-        </form>
-      </section>
-    );
+  }
+  if (!preview && (loadingShift || (!shift && !catalogError))) {
+    return loadingShift
+      ? <div className="loading">Sincronizando caixa…</div>
+      : (
+        <section className="terminal-lock">
+          <Banknote size={35} />
+          <span className="eyebrow">COMEÇAR O TURNO</span>
+          <h1>Vamos abrir seu caixa?</h1>
+          <p>
+            Informe o fundo de troco. Esse valor não altera o preço dos pedidos.
+          </p>
+          <form onSubmit={shiftAction}>
+            <label>
+              Fundo de troco (R$)
+              <input
+                inputMode="decimal"
+                required
+                value={shiftValue}
+                onChange={(e) => setShiftValue(e.target.value)}
+              />
+            </label>
+            {error && (
+              <p role="alert" className="error-message">
+                {error}
+              </p>
+            )}
+            <button className="primary full" disabled={!online || busy}>
+              Abrir meu caixa
+              <ArrowRight size={17} />
+            </button>
+          </form>
+        </section>
+      );
+  }
   return (
-    <>
-      <div className="pdv-heading">
-        <div>
-          <span className="eyebrow">ATENDIMENTO ÁGIL · PLANETA LANCHES</span>
-          <h1>
-            Frente de caixa<span className="heading-dot">.</span>
-          </h1>
-          <p>Escolha, personalize e siga para o pagamento.</p>
-        </div>
-        <div className="shift-indicator">
-          <span className="live-dot" />
-          {preview
-            ? "Prévia visual"
-            : `Caixa de ${profile.name.split(" ")[0]}`}{" "}
-          {!preview && (
+    <PdvTemplate
+      products={products}
+      filtered={filtered}
+      categories={categories}
+      category={category}
+      onCategory={setCategory}
+      query={query}
+      onQuery={setQuery}
+      draft={draft}
+      total={total}
+      frozen={frozen}
+      selected={selected}
+      onSelect={setSelected}
+      onAdd={add}
+      onUpdate={update}
+      onCustomer={(customer) =>
+        setDraft((previous) => ({ ...previous, customer }))}
+      onChannel={(channel) =>
+        setDraft((previous) => ({ ...previous, channel }))}
+      demand={!preview && (
+        <DemandPanel
+          compact
+          presentation="inline"
+          items={draft.items}
+          products={products}
+        />
+      )}
+      notices={
+        <>
+          {catalogError && (
+            <div className="error-message" role="alert">
+              {catalogError}
+              <button onClick={load} className="secondary">
+                Tentar sincronizar
+              </button>
+            </div>
+          )}
+          {!online && (
+            <div className="offline-banner" role="alert">
+              <WifiOff size={18} />Sem internet. O rascunho está preservado
+              neste terminal. Envios e pagamentos estão bloqueados.
+            </div>
+          )}
+        </>
+      }
+      operations={!preview && (
+        <>
+          <div className="pl:mb-3 pl:flex pl:items-center pl:justify-between pl:gap-3 pl:text-sm pl:text-gray-300">
+            <span>Caixa de {profile.name}</span>
             <button
-              className="text-button"
+              className="secondary"
               disabled={busy}
               onClick={() => {
                 setClosing(!closing);
@@ -536,489 +571,88 @@ export default function PDV({ preview = false }) {
             >
               Fechar caixa
             </button>
-          )}
-        </div>
-      </div>
-      {closing && (
-        <form className="close-shift" onSubmit={shiftAction}>
-          <label>
-            Dinheiro contado no fechamento (R$)
-            <input
-              inputMode="decimal"
-              required
-              value={shiftValue}
-              onChange={(e) => setShiftValue(e.target.value)}
-            />
-          </label>
-          <button
-            className="secondary"
-            type="button"
-            onClick={() => setClosing(false)}
-          >
-            Voltar
-          </button>
-          <button className="primary" disabled={!online || busy}>
-            Confirmar fechamento
-          </button>
-        </form>
-      )}
-      {catalogError && (
-        <div className="error-message" role="alert">
-          {catalogError}
-          <button onClick={load} className="secondary">
-            Tentar sincronizar
-          </button>
-        </div>
-      )}
-      {!preview && (
-        <div className="pending-orders">
-          <button
-            className="text-button"
-            disabled={busy || !online}
-            onClick={listPending}
-          >
-            Consultar meus pedidos aguardando pagamento
-            <ArrowRight size={13} />
-          </button>
-          {pendingOrders && (
-            <div>
-              {!pendingOrders.length && (
-                <p>Nenhum pedido pendente neste caixa.</p>
-              )}
-              {pendingOrders.map((o) => (
-                <button
-                  className="secondary"
-                  disabled={busy}
-                  key={o.id}
-                  onClick={() => resume(o)}
-                >
-                  #{o.number} · {o.customer} · {money(o.total_cents)}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      {!online && (
-        <div className="offline-banner" role="alert">
-          <WifiOff size={18} />
-          Sem internet. O rascunho está preservado neste terminal. Envios e
-          pagamentos estão bloqueados.
-        </div>
-      )}
-      <div className="pdv-layout">
-        <section className="catalog" id="catalogo">
-          <div className="catalog-top">
-            <label className="search-box">
-              <Search size={18} />
-              <input
-                aria-label="Buscar produto"
-                placeholder="Buscar um sabor ou ingrediente…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              {query && (
-                <button aria-label="Limpar busca" onClick={() => setQuery("")}>
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </label>
-            <span>{products.length} produtos no cardápio</span>
           </div>
-          <div className="category-tabs" aria-label="Categorias">
-            {categories.map(([id, name]) => (
+          {!preview && shift && <CashDrawer shiftId={shift.id} />}
+          {closing && (
+            <form className="close-shift" onSubmit={shiftAction}>
+              <label>
+                Dinheiro contado no fechamento (R$)
+                <input
+                  inputMode="decimal"
+                  required
+                  value={shiftValue}
+                  onChange={(e) => setShiftValue(e.target.value)}
+                />
+              </label>
+              <label>
+                Justificativa do fechamento
+                <input
+                  required
+                  minLength={5}
+                  maxLength={500}
+                  value={closingReason}
+                  onChange={(e) => setClosingReason(e.target.value)}
+                />
+              </label>
               <button
-                key={id}
-                className={category === id ? "active" : ""}
-                onClick={() => setCategory(id)}
+                className="secondary"
+                type="button"
+                onClick={() => setClosing(false)}
               >
-                {name}
-                <span>
-                  {id === "all"
-                    ? products.length
-                    : products.filter((p) => p.category === id).length}
-                </span>
+                Voltar
               </button>
-            ))}
-          </div>
-          <div className="catalog-section-title">
-            <h2>{categories.find(([id]) => id === category)[1]}</h2>
-            <span>
-              Seleção rápida <span>↗</span>
-            </span>
-          </div>
-          <div className="product-grid">
-            {filtered.map((p) => (
-              <button
-                className="product-card"
-                key={p.id}
-                disabled={frozen}
-                onClick={() => add(p)}
-                aria-label={`Adicionar ${p.name}`}
-              >
-                <div className="product-image">
-                  <img
-                    src={p.image_path}
-                    alt={`Ilustração de ${p.name}`}
-                    loading="lazy"
-                  />
-                  <span>ILUSTRAÇÃO</span>
-                </div>
-                <div className="product-info">
-                  <small>
-                    {categories.find(([id]) => id === p.category)?.[1]}
-                  </small>
-                  <h3>{p.name}</h3>
-                  <p>{p.description || "Para acompanhar seu lanche."}</p>
-                  <div>
-                    <strong>{money(p.price_cents)}</strong>
-                    <span className="add-square">
-                      <Plus size={18} />
-                    </span>
-                  </div>
-                </div>
+              <button className="primary" disabled={!online || busy}>
+                Confirmar fechamento
               </button>
-            ))}
-          </div>
-          {!filtered.length && (
-            <div className="empty">
-              <Search size={30} />
-              <h2>
-                {category === "combos"
-                  ? "Seus combos entram aqui."
-                  : "Nenhum produto encontrado."}
-              </h2>
-              <p>
-                {category === "combos"
-                  ? "Nenhum combo cadastrado. Os preços do cardápio original foram preservados."
-                  : "Tente outro nome, ingrediente ou categoria."}
-              </p>
-            </div>
+            </form>
           )}
-          <p className="catalog-note">
-            Produtos e preços do cardápio da loja. Sem combos ou fichas técnicas
-            inventadas.
-          </p>
-        </section>
-        <aside className="checkout" id="pedido-atual">
-          <button
-            className="mobile-catalog-link text-button"
-            onClick={() =>
-              document
-                .getElementById("catalogo")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
-          >
-            ← Voltar ao cardápio
-          </button>
-          <div className="checkout-heading">
-            <div>
-              <ShoppingBasket size={19} />
-              <h2>Pedido atual</h2>
-            </div>
-            <span>
-              {draft.order
-                ? `#${draft.order.number}`
-                : `${draft.items.reduce((a, i) => a + i.quantity, 0)} itens`}
-            </span>
-          </div>
-          <div className="customer-fields">
-            <label>
-              Cliente
-              <input
-                disabled={frozen}
-                aria-label="Nome do cliente"
-                placeholder="Cliente balcão"
-                maxLength={100}
-                value={draft.customer}
-                onChange={(e) =>
-                  setDraft({ ...draft, customer: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              Canal
-              <select
-                disabled={frozen}
-                value={draft.channel}
-                onChange={(e) =>
-                  setDraft({ ...draft, channel: e.target.value })
-                }
+          {!preview && (
+            <div className="pending-orders">
+              <button
+                className="text-button"
+                disabled={busy || !online}
+                onClick={listPending}
               >
-                <option value="counter">Balcão</option>
-                <option value="whatsapp">WhatsApp · manual</option>
-              </select>
-            </label>
-          </div>
-          <div className="cart-items">
-            {!draft.items.length && (
-              <div className="cart-empty">
-                <ShoppingBasket size={38} />
-                <h3>Qual vai ser o pedido?</h3>
-                <p>
-                  Toque nos produtos ao lado.
-                  <br />
-                  Os detalhes ficam aqui, sem complicação.
-                </p>
-              </div>
-            )}
-            {draft.items.map((item) => (
-              <article
-                className={`cart-line ${selected === item.lineId ? "selected" : ""}`}
-                key={item.lineId}
-              >
-                <div className="cart-line-top">
-                  <button
-                    className="item-name"
-                    aria-expanded={selected === item.lineId}
-                    onClick={() =>
-                      setSelected(selected === item.lineId ? null : item.lineId)
-                    }
-                  >
-                    <strong>{item.name}</strong>
-                    <small>
-                      {item.modifiers.length
-                        ? item.modifiers.join(" · ")
-                        : "Toque para personalizar"}
-                    </small>
-                  </button>
-                  <strong>{money(item.quantity * item.price_cents)}</strong>
-                </div>
-                <div className="cart-line-tools">
-                  <div className="qty-control">
+                Consultar meus pedidos aguardando pagamento
+                <ArrowRight size={13} />
+              </button>
+              {pendingOrders && (
+                <div>
+                  {!pendingOrders.length && (
+                    <p>Nenhum pedido pendente neste caixa.</p>
+                  )}
+                  {pendingOrders.map((o) => (
                     <button
-                      aria-label={`Diminuir ${item.name}`}
-                      disabled={frozen}
-                      onClick={() =>
-                        update(item.lineId, { quantity: item.quantity - 1 })
-                      }
+                      className="secondary"
+                      disabled={busy}
+                      key={o.id}
+                      onClick={() => resume(o)}
                     >
-                      <Minus size={12} />
-                    </button>
-                    <b>{item.quantity}</b>
-                    <button
-                      aria-label={`Aumentar ${item.name}`}
-                      disabled={frozen || item.quantity >= 100}
-                      onClick={() =>
-                        update(item.lineId, { quantity: item.quantity + 1 })
-                      }
-                    >
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                  <button
-                    className="icon-button"
-                    aria-label={`Remover ${item.name}`}
-                    disabled={frozen}
-                    onClick={() => update(item.lineId, { quantity: 0 })}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                {selected === item.lineId && (
-                  <ErrorBoundary area="modifiers">
-                    <div className="inline-modifiers">
-                      <span>DO JEITO DO CLIENTE</span>
-                      <div>
-                        {item.allowed_modifiers.map((m) => (
-                          <button
-                            key={m}
-                            disabled={frozen}
-                            className={
-                              item.modifiers.includes(m) ? "active" : ""
-                            }
-                            onClick={() =>
-                              update(item.lineId, {
-                                modifiers: toggleModifier(item.modifiers, m),
-                              })
-                            }
-                          >
-                            {item.modifiers.includes(m) && <Check size={11} />}{" "}
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                      <textarea
-                        aria-label={`Observações de ${item.name}`}
-                        placeholder="Algum detalhe para a cozinha?"
-                        value={item.notes}
-                        maxLength={500}
-                        disabled={frozen}
-                        onChange={(e) =>
-                          update(item.lineId, { notes: e.target.value })
-                        }
-                      />
-                    </div>
-                  </ErrorBoundary>
-                )}
-              </article>
-            ))}
-          </div>
-          <div className="checkout-bottom">
-            <div className="subtotal">
-              <span>
-                {draft.order
-                  ? "Total calculado no banco"
-                  : "Total estimado · confirmado pelo banco"}
-              </span>
-              <strong>{money(total)}</strong>
-            </div>
-            {draft.order?.status === "cancelled" ? (
-              <div className="error-message">
-                <h3>Pedido cancelado.</h3>
-                <p>Este pedido não está disponível para pagamento.</p>
-                <button className="secondary" onClick={reset}>
-                  Novo pedido
-                </button>
-              </div>
-            ) : draft.payment?.status === "confirmed" ? (
-              <div className="payment-success" role="status">
-                <Check size={23} />
-                <h3>Pagamento confirmado.</h3>
-                <p>Pedido liberado para os setores da cozinha.</p>
-                <button className="primary full" onClick={reset}>
-                  Começar próximo pedido
-                  <Plus size={16} />
-                </button>
-              </div>
-            ) : draft.order ? (
-              <>
-                <div className="payment-options">
-                  {[
-                    ["cash", "Dinheiro", Banknote],
-                    ["pix", "Pix", Smartphone],
-                    ["tef", "Cartão", CreditCard],
-                  ].map(([id, label, Icon]) => (
-                    <button
-                      key={id}
-                      disabled={busy || Boolean(draft.payment)}
-                      className={method === id ? "active" : ""}
-                      onClick={() => setMethod(id)}
-                    >
-                      <Icon size={17} />
-                      {label}
+                      #{o.number} · {o.customer} · {money(o.total_cents)}
                     </button>
                   ))}
                 </div>
-                {method !== "cash" && (
-                  <p className="payment-disclaimer">
-                    Pix dinâmico e TEF exigem provedor contratado. Não
-                    conectados nesta versão.
-                  </p>
-                )}
-                {paymentIntent?.pix && (
-                  <div className="pix-code">
-                    <QRCodeSVG value={paymentIntent.pix.copyPaste} size={150} />
-                    <p>
-                      Válido até{" "}
-                      {new Date(paymentIntent.pix.expiresAt).toLocaleTimeString(
-                        "pt-BR",
-                      )}
-                    </p>
-                    <button
-                      className="secondary"
-                      onClick={() =>
-                        navigator.clipboard.writeText(
-                          paymentIntent.pix.copyPaste,
-                        )
-                      }
-                    >
-                      Copiar código Pix
-                    </button>
-                    <code>{paymentIntent.pix.copyPaste}</code>
-                  </div>
-                )}
-                <button
-                  className="primary full"
-                  disabled={!online || busy || preview}
-                  onClick={pay}
-                >
-                  {busy
-                    ? "Processando…"
-                    : draft.payment
-                      ? "Retomar mesma tentativa"
-                      : method === "cash"
-                        ? "Confirmar recebimento em dinheiro"
-                        : method === "pix"
-                          ? "Gerar Pix dinâmico"
-                          : "Iniciar TEF"}
-                  <ArrowRight size={17} />
-                </button>
-                <p className="field-note">
-                  <LockKeyhole size={12} />A cozinha só recebe após a
-                  confirmação válida.
-                </p>
-              </>
-            ) : (
-              <>
-                <button
-                  className="primary full"
-                  onClick={send}
-                  disabled={!draft.items.length || busy || !online || preview}
-                >
-                  {busy
-                    ? "Enviando…"
-                    : draft.submitted
-                      ? "Reenviar mesma tentativa"
-                      : "Ir para pagamento"}
-                  {draft.submitted ? (
-                    <RotateCcw size={17} />
-                  ) : (
-                    <ArrowRight size={17} />
-                  )}
-                </button>
-                <p className="field-note">
-                  <Clock3 size={12} />
-                  {preview
-                    ? "Prévia sem banco. Pagamentos e envios desativados."
-                    : "O banco valida produtos, quantidades e preços."}
-                </p>
-              </>
-            )}
-            {draft.order?.status === "pending_payment" && !draft.payment && (
-              <button
-                className="clear-cart"
-                disabled={busy || !online}
-                onClick={cancelUnpaid}
-              >
-                Cancelar pedido ainda sem cobrança
-              </button>
-            )}
-            {error && (
-              <p className="error-message" role="alert">
-                {error}
-              </p>
-            )}
-            {draft.items.length > 0 && !draft.order && !draft.submitted && (
-              <button
-                className="clear-cart"
-                disabled={busy}
-                onClick={() => {
-                  if (confirm("Limpar o pedido em rascunho?")) reset();
-                }}
-              >
-                Limpar rascunho
-              </button>
-            )}
-          </div>
-        </aside>
-      </div>
-      <button
-        className="mobile-order-shortcut"
-        onClick={() =>
-          document
-            .getElementById("pedido-atual")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" })
-        }
-      >
-        <ShoppingBasket size={17} />
-        <span>
-          Ver pedido · {draft.items.reduce((sum, i) => sum + i.quantity, 0)}{" "}
-          itens
-        </span>
-        <strong>{money(total)}</strong>
-        <ArrowRight size={16} />
-      </button>
-    </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      paymentActions={
+        <PaymentActions
+          draft={draft}
+          busy={busy}
+          online={online}
+          preview={preview}
+          method={method}
+          setMethod={setMethod}
+          paymentIntent={paymentIntent}
+          pay={pay}
+          send={send}
+          reset={reset}
+          cancelUnpaid={cancelUnpaid}
+          error={error}
+        />
+      }
+    />
   );
 }
