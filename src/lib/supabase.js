@@ -1,39 +1,114 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-// Validação Estrita: Impede que o deploy na Vercel falhe silenciosamente
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Variáveis de ambiente do Supabase ausentes. Verifica o ficheiro .env ou as definições da Vercel.');
+import { createClient } from "@supabase/supabase-js";
+import { oneRecord } from "./operations";
+import { reportError } from "./monitoring";
+import { fetchWithTimeout } from "./network";
+const url = import.meta.env.VITE_SUPABASE_URL;
+const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY;
+function publicKey(value) {
+  if (!value || value.startsWith("sb_secret_")) return false;
+  if (value.startsWith("sb_publishable_")) return true;
+  try {
+    return (
+      JSON.parse(
+        atob(value.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")),
+      ).role === "anon"
+    );
+  } catch {
+    return false;
+  }
 }
-
-// Política de Retentativas (Exponential Backoff)
-const customFetch = async (url, options) => {
-  let retries = 3;
-  let delay = 1000; // Começa com 1 segundo
-  
-  while (retries > 0) {
-    try {
-      const response = await fetch(url, options);
-      // Se for um erro de servidor (5xx), forçamos o catch para tentar novamente
-      if (!response.ok && response.status >= 500) throw new Error('Erro de servidor temporário');
-      return response;
-    } catch (error) {
-      retries -= 1;
-      if (retries === 0) throw error;
-      await new Promise(res => setTimeout(res, delay));
-      delay *= 2; // Dobra o tempo de espera a cada falha (1s, 2s, 4s)
-    }
+function validUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return (
+      Boolean(parsed.hostname) &&
+      (parsed.protocol === "https:" ||
+        (parsed.protocol === "http:" &&
+          ["localhost", "127.0.0.1"].includes(parsed.hostname)))
+    );
+  } catch {
+    return false;
   }
-};
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  global: {
-    fetch: customFetch,
-  },
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
+}
+export const configured = Boolean(validUrl(url) && publicKey(key));
+export const supabase = configured
+  ? createClient(url, key, {
+      global: { fetch: fetchWithTimeout },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+      },
+      realtime: {
+        params: { eventsPerSecond: 10 },
+        heartbeatIntervalMs: 25000,
+        reconnectAfterMs: (tries) => Math.min(1000 * 2 ** tries, 30000),
+      },
+    })
+  : null;
+export async function rpc(name, args) {
+  if (!supabase) throw new Error("Configure o Supabase para continuar.");
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) {
+    const failure = new Error(
+      error.code === "23505" && name === "confirm_manual_pix"
+        ? "Esta referência bancária já foi utilizada. Confira o extrato e o pedido correto."
+        : error.code === "23505" && name === "confirm_manual_pix_refund"
+          ? "Esta referência de devolução já foi registrada. Confira a auditoria."
+          : friendlyError(error.message),
+    );
+    failure.code = error.code;
+    failure.conflict = error.message?.includes("idempotency_conflict");
+    failure.rejected = /^(P0001|22[A-Z0-9]{3}|23[A-Z0-9]{3}|42501|40001)$/.test(
+      error.code || "",
+    );
+    reportError(failure, `rpc:${name}`);
+    throw failure;
   }
-});
+  return [
+    "create_order",
+    "begin_payment",
+    "request_refund",
+    "claim_external_order",
+  ].includes(name)
+    ? oneRecord(data)
+    : data;
+}
+export function friendlyError(message = "") {
+  const errors = {
+    staff_pin_in_use: "Este PIN já está em uso por outro funcionário ativo. Escolha quatro dígitos diferentes.",
+    justification_required:
+      "Informe uma justificativa entre 5 e 500 caracteres.",
+    insufficient_cash:
+      "Saldo físico insuficiente no caixa. Confira as vendas e os movimentos.",
+    discount_not_allowed:
+      "Desconto indisponível: confira se o pedido ainda está sem cobrança e se o valor é válido.",
+    bank_reference_required:
+      "Informe a referência real da transação no extrato bancário.",
+    immutable_audit_log: "Os registros de auditoria são imutáveis.",
+    checkout_rate_limit:
+      "Muitos pedidos neste link. Aguarde um minuto e retome a mesma tentativa.",
+    link_unavailable: "Link indisponível, expirado ou revogado.",
+    last_admin: "O último administrador ativo não pode ser removido.",
+    admin_open_shift_required:
+      "Abra um caixa de administrador para devolver dinheiro.",
+    no_confirmed_payment:
+      "Não existe pagamento confirmado disponível para estorno.",
+    access_denied: "Seu perfil não tem permissão ou o terminal está bloqueado.",
+    open_shift_required: "Abra seu caixa antes de registrar pedidos.",
+    pending_orders_in_shift:
+      "Resolva os pedidos aguardando pagamento antes de fechar o caixa.",
+    idempotency_conflict:
+      "Esta tentativa já foi usada para outro pedido. Consulte o atendimento anterior.",
+    payment_reconciliation_required:
+      "Este pedido exige conciliação do pagamento antes de cancelar.",
+    product_unavailable: "Um produto ficou indisponível. Atualize o cardápio.",
+    invalid_modifier: "Uma observação não é permitida para este produto.",
+    shift_unavailable: "Caixa indisponível ou já fechado.",
+  };
+  return (
+    Object.entries(errors).find(([key]) => message.includes(key))?.[1] ||
+    "Não foi possível concluir. Confira a conexão e tente novamente com a mesma tentativa."
+  );
+}

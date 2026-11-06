@@ -1,25 +1,15 @@
-import { useState, useEffect } from 'react';
-
+import { useEffect, useState } from "react";
 export function useConnection() {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
+  const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      // Aqui disparamos a função para sincronizar os pedidos que ficaram retidos no IndexedDB
-      window.dispatchEvent(new CustomEvent('sync-offline-orders'));
-    };
-    
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
+    const yes = () => setOnline(true),
+      no = () => setOnline(false);
+    window.addEventListener("online", yes);
+    window.addEventListener("offline", no);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener("online", yes);
+      window.removeEventListener("offline", no);
     };
   }, []);
-
-  return { isOnline };
+  return online;
 }
