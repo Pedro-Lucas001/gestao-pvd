@@ -43,8 +43,11 @@ serve(async (req) => {
     throw new Error('Ação não suportada')
 
   } catch (error) {
+    const message = error !== null && typeof error === 'object' && 'message' in error
+      ? String(error.message)
+      : String(error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
     )
   }
