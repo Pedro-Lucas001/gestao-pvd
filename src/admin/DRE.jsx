@@ -1,186 +1,107 @@
-import { useCallback, useEffect, useState } from "react";
-import { rpc } from "../lib/supabase";
-import { cents, money } from "../lib/operations";
-import { command } from "./commands";
+import React, { useState, useEffect } from 'react';
+// import { supabase } from '../lib/supabase';
+
 export default function DRE() {
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Recife",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-  const [from, setFrom] = useState(today.slice(0, 8) + "01"),
-    [to, setTo] = useState(today),
-    [data, setData] = useState(null),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  const load = useCallback(async () => {
-    const end = new Date(`${to}T00:00:00-03:00`);
-    end.setTime(end.getTime() + 86400000);
-    try {
-      setData(
-        await rpc("admin_dre", {
-          p_from: new Date(`${from}T00:00:00-03:00`).toISOString(),
-          p_to: end.toISOString(),
-        }),
-      );
-    } catch (error) {
-      setError(error.message);
-    }
-  }, [from, to]);
-  useEffect(() => {
-    const timer = setTimeout(load, 0);
-    return () => clearTimeout(timer);
-  }, [load]);
+  // Simulação de agregação de dados do Supabase
+  const [metrics, setMetrics] = useState({
+    faturacaoBruta: 12450.00,
+    cmv: 3850.00, // Custo total de ingredientes deduzidos
+    despesasFixas: 2100.00,
+    pedidosTotal: 342
+  });
+
+  const lucroLiquido = metrics.faturacaoBruta - metrics.cmv - metrics.despesasFixas;
+  const margemLucro = ((lucroLiquido / metrics.faturacaoBruta) * 100).toFixed(1);
+
   return (
-    <section className="management">
-      <span className="eyebrow">ADMINISTRAÇÃO · FINANCEIRO</span>
-      <h1>DRE gerencial.</h1>
-      <p>
-        Recebimentos, insumos e despesas lançadas. Os estornos acompanham as
-        vendas do período, no estado atual.
-      </p>
-      <form
-        className="filter-row"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setError("");
-          load();
-        }}
-      >
-        <label>
-          De<input
-            type="date"
-            value={from}
-            required
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </label>
-        <label>
-          Até<input
-            type="date"
-            value={to}
-            required
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </label>
-        <button className="primary">Atualizar período</button>
-      </form>
-      {error && <p className="error-message" role="alert">{error}</p>}
-      {data && (
-        <>
-          <article className="management-panel dre-statement">
+    <div className="min-h-screen bg-dark-900 text-white font-sans p-8 overflow-y-auto">
+      <header className="mb-10">
+        <h1 className="text-4xl font-bold tracking-tight">Dashboard <span className="text-brasa-500">Executivo</span></h1>
+        <p className="text-gray-400 mt-2">Demonstração de Resultados (Mês Atual)</p>
+      </header>
+
+      {/* Cartões de KPI Principais */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        {/* Faturação Bruta */}
+        <div className="bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-glass">
+          <h3 className="text-gray-400 font-bold mb-2 uppercase tracking-wider text-sm">Faturação Bruta</h3>
+          <p className="text-3xl font-bold text-white">R$ {metrics.faturacaoBruta.toFixed(2)}</p>
+          <span className="text-green-500 text-sm font-bold flex items-center gap-1 mt-2">
+            +14% vs mês anterior
+          </span>
+        </div>
+
+        {/* CMV (Custos de Produção) */}
+        <div className="bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-glass">
+          <h3 className="text-gray-400 font-bold mb-2 uppercase tracking-wider text-sm">Custo (CMV)</h3>
+          <p className="text-3xl font-bold text-red-400">R$ {metrics.cmv.toFixed(2)}</p>
+          <span className="text-gray-500 text-sm font-bold mt-2 block">
+            {((metrics.cmv / metrics.faturacaoBruta) * 100).toFixed(1)}% da faturação
+          </span>
+        </div>
+
+        {/* Lucro Líquido (Glow Laranja) */}
+        <div className="bg-dark-800 p-6 rounded-2xl border border-brasa-500/50 shadow-brasa-glow relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-brasa-500/10 rounded-full blur-3xl"></div>
+          <h3 className="text-gray-400 font-bold mb-2 uppercase tracking-wider text-sm">Lucro Líquido</h3>
+          <p className="text-4xl font-bold text-brasa-500">R$ {lucroLiquido.toFixed(2)}</p>
+          <span className="text-white text-sm font-bold mt-2 block">
+            Margem: {margemLucro}%
+          </span>
+        </div>
+
+        {/* Volume de Pedidos */}
+        <div className="bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-glass">
+          <h3 className="text-gray-400 font-bold mb-2 uppercase tracking-wider text-sm">Total Pedidos</h3>
+          <p className="text-3xl font-bold text-white">{metrics.pedidosTotal}</p>
+          <span className="text-gray-500 text-sm font-bold mt-2 block">Ticket Médio: R$ {(metrics.faturacaoBruta / metrics.pedidosTotal).toFixed(2)}</span>
+        </div>
+      </div>
+
+      {/* Secção de Gráficos e Tabelas Analíticas */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Produtos Mais Vendidos */}
+        <div className="lg:col-span-2 bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-glass">
+          <h3 className="text-xl font-bold text-white mb-6">Top Produtos Vendidos</h3>
+          <div className="space-y-4">
             {[
-              ["Vendas recebidas · após descontos", data.sales_cents],
-              ["(−) Estornos confirmados", -data.refunds_cents],
-              ["Receita líquida", data.net_revenue_cents],
-              ["(−) Insumos consumidos", -data.cost_cents],
-              ["(−) Despesas operacionais lançadas", -data.expense_cents],
-            ].map(([label, amount]) => (
-              <div className="report-row" key={label}>
-                <strong>{label}</strong>
-                <b>{money(amount)}</b>
+              { nome: 'Mega Planeta Burger', qtd: 145, valor: 4770.50, barWidth: '85%' },
+              { nome: 'Combo Casal', qtd: 98, valor: 3910.20, barWidth: '60%' },
+              { nome: 'Batata Rústica com Cheddar', qtd: 112, valor: 1680.00, barWidth: '45%' },
+            ].map((prod, i) => (
+              <div key={i} className="flex flex-col gap-2">
+                <div className="flex justify-between text-sm font-bold">
+                  <span className="text-gray-300">{prod.nome} <span className="text-gray-500">({prod.qtd}x)</span></span>
+                  <span className="text-brasa-500">R$ {prod.valor.toFixed(2)}</span>
+                </div>
+                <div className="w-full bg-dark-900 rounded-full h-2">
+                  <div className="bg-brasa-500 h-2 rounded-full" style={{ width: prod.barWidth }}></div>
+                </div>
               </div>
             ))}
-            <div className="report-row dre-result">
-              <strong>
-                Resultado gerencial {data.legacy_cost_entries ? "estimado" : ""}
-              </strong>
-              <b>
-                {data.result_cents === null
-                  ? "Custos incompletos"
-                  : money(data.result_cents)}
-              </b>
-            </div>
-            <p>
-              Descontos já incluídos nas vendas:{" "}
-              {money(data.discounts_cents)}. Sangrias e suprimentos não são
-              despesas. Tributos e despesas não cadastrados não são deduzidos
-              automaticamente.
-            </p>
-            {data.products_without_recipe > 0 && (
-              <p className="error-message">
-                Há {data.products_without_recipe}{" "}
-                produtos vendidos sem ficha técnica. Cadastre os custos para
-                apurar o resultado.
-              </p>
-            )}
-            {data.legacy_cost_entries > 0 && (
-              <p className="offline-banner">
-                {data.legacy_cost_entries}{" "}
-                movimentos antigos usam o custo atual do insumo. Novas baixas
-                guardam o custo do momento da venda.
-              </p>
-            )}
-          </article>
-          <article className="management-panel">
-            <h2>Despesas do período</h2>
-            {!data.expenses.length && <p>Nenhuma despesa registrada.</p>}
-            {data.expenses.map((e) => (
-              <div className="report-row" key={e.id}>
-                <strong>{e.description}</strong>
-                <span>{e.expense_date}</span>
-                <b>{money(e.amount_cents)}</b>
-              </div>
-            ))}
-          </article>
-        </>
-      )}
-      <form
-        className="management-panel form-columns"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const form = event.currentTarget, fields = new FormData(form);
-          setBusy(true);
-          setError("");
-          try {
-            await command("record_operating_expense", {
-              p_description: fields.get("description").trim(),
-              p_amount: cents(fields.get("amount")),
-              p_date: fields.get("date"),
-              p_reason: fields.get("reason").trim(),
-            });
-            form.reset();
-            await load();
-          } catch (error) {
-            setError(error.message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <h2 className="span-all">Registrar despesa operacional</h2>
-        <label>
-          Descrição<input
-            name="description"
-            required
-            minLength={2}
-            maxLength={150}
-          />
-        </label>
-        <label>
-          Valor · R$<input
-            name="amount"
-            required
-            inputMode="decimal"
-            placeholder="0,00"
-          />
-        </label>
-        <label>
-          Data<input name="date" type="date" required defaultValue={today} />
-        </label>
-        <label>
-          Justificativa<input
-            name="reason"
-            required
-            minLength={5}
-            maxLength={500}
-          />
-        </label>
-        <button className="primary" disabled={busy}>
-          {busy ? "Registrando…" : "Registrar despesa"}
-        </button>
-      </form>
-    </section>
+          </div>
+        </div>
+
+        {/* Alertas de Estoque Cruzado (Inteligência) */}
+        <div className="bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-glass">
+          <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            Alertas de Insumos
+          </h3>
+          <ul className="space-y-4">
+            <li className="bg-dark-900 p-4 rounded-xl border border-red-500/30">
+              <p className="text-red-400 font-bold text-sm">Cebola Caramelizada</p>
+              <p className="text-gray-400 text-xs mt-1">Stock crítico: Restam 1.2kg (Suficiente para ~20 burgers).</p>
+            </li>
+            <li className="bg-dark-900 p-4 rounded-xl border border-yellow-500/30">
+              <p className="text-yellow-400 font-bold text-sm">Bacon em Tiras</p>
+              <p className="text-gray-400 text-xs mt-1">Abaixo da margem de segurança (4.5kg).</p>
+            </li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
   );
 }

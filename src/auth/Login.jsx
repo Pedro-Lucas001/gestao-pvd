@@ -1,239 +1,148 @@
-import { useEffect, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
-import { ArrowRight, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
-import { useAuth } from "./context";
-import { useConnection } from "../components/useConnection";
-import { homeForRole } from "./permissions";
-import { deviceToken } from "./device";
-import Brand from "../components/Brand";
-import PinPad from "./PinPad";
+import React, { useState, useEffect } from 'react';
+// import { useNavigate } from 'react-router-dom';
+// import { supabase } from '../lib/supabase';
+
 export default function Login() {
-  const {
-    profile,
-    loading,
-    session,
-    authError,
-    retry,
-    signOut,
-    signIn,
-    signInWithPin,
-  } = useAuth();
-  const online = useConnection();
-  const [mode, setMode] = useState("admin"),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [pin, setPin] = useState(""),
-    [retryAt, setRetryAt] = useState(0),
-    [now, setNow] = useState(Date.now);
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  // const navigate = useNavigate();
+
+  // Auto-submit quando o PIN atinge 4 dígitos
   useEffect(() => {
-    if (!retryAt) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [retryAt]);
-  const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
-  if (!loading && profile && session && !authError) {
-    return <Navigate to={homeForRole(profile.role)} replace />;
-  }
-  async function submitPin(event) {
-    event.preventDefault();
-    if (busy || remaining || pin.length !== 4) return;
-    setBusy(true);
-    setError("");
-    try {
-      await signInWithPin(pin);
-    } catch (error) {
-      setError(error.message);
-      setRetryAt(Date.parse(error.retryAt) || 0);
-      setNow(Date.now());
-    } finally {
-      setBusy(false);
-      setPin("");
+    if (pin.length === 4) {
+      handleLogin();
     }
-  }
+  }, [pin]);
+
+  const handleLogin = async () => {
+    setIsLoading(true);
+    setError(false);
+
+    try {
+      // SIMULAÇÃO: Aqui faria a consulta real ao Supabase
+      // const { data, error } = await supabase.from('profiles').select('role, department').eq('pin_code', pin).single();
+      
+      // Lógica simulada de separação:
+      // Se PIN for 1111 -> Caixa (PDV)
+      // Se PIN for 2222 -> Cozinha (KDS)
+      // Se PIN for 3333 -> Admin (Back-office)
+      
+      setTimeout(() => {
+        if (pin === '1111') {
+          alert('Redirecionando para o CAIXA (PDV)...');
+          // navigate('/pdv');
+        } else if (pin === '2222') {
+          alert('Redirecionando para a COZINHA (KDS)...');
+          // navigate('/kds');
+        } else if (pin === '3333') {
+          alert('Redirecionando para o BACK-OFFICE...');
+          // navigate('/admin');
+        } else {
+          setError(true);
+          setPin('');
+        }
+        setIsLoading(false);
+      }, 800);
+
+    } catch (err) {
+      setError(true);
+      setPin('');
+      setIsLoading(false);
+    }
+  };
+
+  const handlePress = (num) => {
+    if (pin.length < 4 && !isLoading) {
+      setPin(prev => prev + num);
+      setError(false);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!isLoading) {
+      setPin(prev => prev.slice(0, -1));
+      setError(false);
+    }
+  };
+
   return (
-    <div className="auth-page">
-      <section className="auth-art">
-        <Brand />
-        <div>
-          <span className="eyebrow">O SABOR É NOSSO. O CONTROLE É SEU.</span>
-          <h1>
-            Uma operação mais leve.<br />
-            <em>Um pedido de cada vez.</em>
+    <div className="min-h-screen bg-dark-900 flex items-center justify-center font-sans p-4">
+      {/* Container Principal */}
+      <div className="bg-dark-800 p-10 rounded-3xl shadow-glass border border-dark-700 w-full max-w-md flex flex-col items-center">
+        
+        {/* Logo e Branding */}
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold text-white tracking-tighter mb-1">
+            Planeta<span className="text-brasa-500">Lanches</span>
           </h1>
-          <p>Do balcão à cozinha, o Planeta continua em movimento.</p>
+          <p className="text-gray-400 uppercase tracking-widest text-sm font-bold">
+            Portal de Acesso
+          </p>
         </div>
-        <img
-          src="/brand/planeta-art.png"
-          alt="Identidade ilustrada do Planeta Lanches"
-        />
-        <small>Carpina · PE · Feito com amor</small>
-      </section>
-      <section className="auth-form">
-        <span className="eyebrow">BEM-VINDO AO SEU PLANETA</span>
-        <h2>Vamos começar o turno?</h2>
-        <p>Seu acesso, sua função. Tudo pronto para trabalhar.</p>
-        <div className="login-tabs" role="tablist" aria-label="Forma de acesso">
-          <button
-            id="admin-tab"
-            role="tab"
-            aria-controls="admin-login"
-            aria-selected={mode === "admin"}
-            className={mode === "admin" ? "active" : ""}
-            disabled={busy}
-            onClick={() => {
-              setMode("admin");
-              setError("");
-              setPin("");
-            }}
-          >
-            <ShieldCheck size={18} />Administração
-          </button>
-          <button
-            id="staff-tab"
-            role="tab"
-            aria-controls="staff-login"
-            aria-selected={mode === "pin"}
-            className={mode === "pin" ? "active" : ""}
-            disabled={busy}
-            onClick={() => {
-              setMode("pin");
-              setError("");
-            }}
-          >
-            <UserRound size={18} />Funcionário · PIN
-          </button>
-        </div>
-        {mode === "admin"
-          ? (
-            <form
-              id="admin-login"
-              role="tabpanel"
-              aria-labelledby="admin-tab"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setBusy(true);
-                setError("");
-                const body = Object.fromEntries(
-                  new FormData(event.currentTarget),
-                );
-                try {
-                  const { error } = await signIn(body);
-                  if (error) {
-                    setError(
-                      "Não foi possível entrar. Confira seu e-mail, senha e conexão.",
-                    );
-                  }
-                } catch {
-                  setError(
-                    "Não foi possível entrar. Confira sua conexão e tente novamente.",
-                  );
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <label>
-                E-mail<input
-                  type="email"
-                  name="email"
-                  autoComplete="username"
-                  required
-                  placeholder="voce@exemplo.com"
-                />
-              </label>
-              <label>
-                Senha<input
-                  type="password"
-                  name="password"
-                  autoComplete="current-password"
-                  required
-                  minLength={10}
-                  placeholder="Sua senha"
-                />
-              </label>
-              {(error || authError) && (
-                <p className="error-message" role="alert">
-                  {error || authError}
-                </p>
-              )}
-              <button
-                className="primary full"
-                disabled={busy || loading || !online}
-              >
-                {busy ? "Entrando…" : "Entrar no meu espaço"}
-                <ArrowRight size={19} />
-              </button>
-            </form>
-          )
-          : (
-            <form
-              id="staff-login"
-              className="staff-login-form"
-              role="tabpanel"
-              aria-labelledby="staff-tab"
-              onSubmit={submitPin}
-            >
-              <p className="pin-login-note">
-                Digite seu PIN pessoal. Você será levado diretamente ao caixa ou
-                à sua praça na cozinha.
-              </p>
-              <PinPad
-                value={pin}
-                onChange={setPin}
-                disabled={busy || remaining > 0}
-              />
-              {(error || authError) && (
-                <p className="error-message" role="alert">
-                  {error || authError}
-                </p>
-              )}
-              {remaining > 0 && (
-                <p className="pin-countdown" role="status">
-                  Aguarde{" "}
-                  {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(
-                    2,
-                    "0",
-                  )} para tentar novamente.
-                </p>
-              )}
-              <button
-                className="primary full"
-                disabled={busy || loading || !online || pin.length !== 4 ||
-                  remaining > 0}
-              >
-                {busy ? "Validando acesso…" : "Acessar com PIN"}
-                <ArrowRight size={19} />
-              </button>
-              {!deviceToken() && (
-                <p className="pin-device-note">
-                  <LockKeyhole size={17} />Primeiro acesso neste dispositivo? Um
-                  administrador precisa liberar este terminal.
-                </p>
-              )}
-            </form>
+
+        {/* Feedback Visual do PIN */}
+        <div className="mb-8 flex flex-col items-center h-16 justify-center">
+          {isLoading ? (
+            <div className="flex items-center gap-3 text-brasa-500 font-bold">
+              <div className="w-5 h-5 border-4 border-brasa-500 border-t-transparent rounded-full animate-spin"></div>
+              Autenticando...
+            </div>
+          ) : (
+            <>
+              <div className={`flex gap-4 ${error ? 'animate-bounce' : ''}`}>
+                {[...Array(4)].map((_, i) => (
+                  <div 
+                    key={i} 
+                    className={`w-5 h-5 rounded-full transition-all duration-300 ${
+                      i < pin.length 
+                        ? (error ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-brasa-500 shadow-brasa-glow')
+                        : 'bg-dark-900 border border-dark-700'
+                    }`}
+                  />
+                ))}
+              </div>
+              {error && <p className="text-red-500 text-xs font-bold mt-4 uppercase">PIN Inválido</p>}
+            </>
           )}
-        {session && (!profile || authError) && (
-          <div className="auth-retry">
-            <button className="secondary" onClick={retry}>
-              Verificar perfil novamente
-            </button>
-            <button className="text-button" onClick={signOut}>
-              Sair desta conta
-            </button>
-          </div>
-        )}
-        <div className="secure-note">
-          <ShieldCheck size={19} />
-          <span>
-            {mode === "admin"
-              ? "Acesso verificado por função. Administração, relatórios e equipe ficam disponíveis apenas ao admin."
-              : "PIN individual. Cinco tentativas incorretas bloqueiam o terminal por 3 minutos."}
-          </span>
         </div>
-        <Link className="text-button" to="/previa">
-          Conhecer a interface, sem dados reais<ArrowRight size={15} />
-        </Link>
-      </section>
+
+        {/* Teclado Numérico Gigante para Ecrãs Touch */}
+        <div className="grid grid-cols-3 gap-4 w-full">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+            <button
+              key={num}
+              onClick={() => handlePress(num.toString())}
+              disabled={isLoading}
+              className="h-20 rounded-2xl bg-dark-700 text-white text-3xl font-bold border border-dark-700 hover:border-brasa-500 hover:bg-dark-800 active:scale-95 transition-all shadow-sm"
+            >
+              {num}
+            </button>
+          ))}
+          
+          <div className="h-20"></div> {/* Espaço vazio inferior esquerdo */}
+          
+          <button
+            onClick={() => handlePress('0')}
+            disabled={isLoading}
+            className="h-20 rounded-2xl bg-dark-700 text-white text-3xl font-bold border border-dark-700 hover:border-brasa-500 hover:bg-dark-800 active:scale-95 transition-all shadow-sm"
+          >
+            0
+          </button>
+          
+          <button
+            onClick={handleDelete}
+            disabled={isLoading || pin.length === 0}
+            className="h-20 rounded-2xl bg-dark-900 text-gray-400 text-xl font-bold hover:text-red-500 active:scale-95 transition-all flex items-center justify-center border border-dark-700"
+          >
+            {/* Ícone Backspace */}
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"></path>
+            </svg>
+          </button>
+        </div>
+
+      </div>
     </div>
   );
 }

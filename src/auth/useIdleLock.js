@@ -1,53 +1,31 @@
-import { useEffect } from "react";
-export const IDLE_LIMIT_MS = 10 * 60 * 1000;
-export function expiredActivity(wall, mono, nowWall, nowMono) {
-  return nowWall - wall >= IDLE_LIMIT_MS || nowMono - mono >= IDLE_LIMIT_MS;
-}
-export function useIdleLock(enabled, onLock, onActive) {
+import { useState, useEffect } from 'react';
+
+export function useIdleLock(timeoutMs = 300000) { // 5 minutos por defeito
+  const [isLocked, setIsLocked] = useState(false);
+
   useEffect(() => {
-    if (!enabled) return;
-    let lastWall = Date.now(),
-      lastMono = performance.now(),
-      timer;
-    const expired = () =>
-      expiredActivity(lastWall, lastMono, Date.now(), performance.now());
-    const lock = () => {
-      clearTimeout(timer);
-      onLock();
-    };
-    const schedule = () => {
-      clearTimeout(timer);
-      timer = setTimeout(lock, IDLE_LIMIT_MS);
-    };
-    const input = (event) => {
-      if (!event.isTrusted) return;
-      if (expired()) {
-        lock();
-        return;
+    let timeout;
+    
+    const resetTimer = () => {
+      if (!isLocked) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => setIsLocked(true), timeoutMs);
       }
-      lastWall = Date.now();
-      lastMono = performance.now();
-      schedule();
-      onActive();
     };
-    const visible = () => {
-      if (!document.hidden && expired()) lock();
-    };
-    const events = [
-      "pointerdown",
-      "pointermove",
-      "keydown",
-      "wheel",
-      "touchstart",
-    ];
-    for (const type of events)
-      window.addEventListener(type, input, { passive: true });
-    document.addEventListener("visibilitychange", visible);
-    schedule();
+
+    // Ouve qualquer interação do utilizador
+    const events = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+    events.forEach(event => window.addEventListener(event, resetTimer));
+    
+    resetTimer();
+
     return () => {
-      clearTimeout(timer);
-      for (const type of events) window.removeEventListener(type, input);
-      document.removeEventListener("visibilitychange", visible);
+      clearTimeout(timeout);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
     };
-  }, [enabled, onLock, onActive]);
+  }, [isLocked, timeoutMs]);
+
+  const unlock = () => setIsLocked(false);
+
+  return { isLocked, unlock, setIsLocked };
 }

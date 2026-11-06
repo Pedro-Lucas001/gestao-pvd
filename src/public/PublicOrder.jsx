@@ -1,505 +1,226 @@
-import { useState, useEffect, useCallback } from "react";
-import { QRCodeSVG } from "qrcode.react";
-import { rpc, configured } from "../lib/supabase";
-import { money, toggleModifier, normalize } from "../lib/operations";
-import { invoke } from "../admin/commands";
-const states = {
-  pending_payment: "Aguardando pagamento",
-  queued: "Na fila da cozinha",
-  preparing: "Em preparo",
-  ready: "Pronto",
-  completed: "Concluído",
-  cancelled: "Cancelado",
-};
-function fresh() {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return {
-    key: crypto.randomUUID(),
-    tracking: Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
-      "",
-    ),
-    paymentKey: crypto.randomUUID(),
-    items: [],
-    contact: {
-      name: "",
-      phone: "",
-      address: "",
-      email: "",
-      whatsapp_consent: false,
-    },
-    order: null,
-    submitted: false,
-  };
-}
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase'; // Certifique-se de que o caminho está correto
+
 export default function PublicOrder() {
-  const token = new URLSearchParams(location.search).get("token") || "",
-    slot = `planeta:checkout:${token.slice(0, 12)}`;
-  const [draft, setDraft] = useState(() => {
-      try {
-        return JSON.parse(sessionStorage.getItem(slot)) || fresh();
-      } catch {
-        return fresh();
-      }
-    }),
-    [menu, setMenu] = useState(null),
-    [query, setQuery] = useState(""),
-    [category, setCategory] = useState("all"),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [status, setStatus] = useState(null),
-    [intent, setIntent] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [step, setStep] = useState('MENU'); // MENU, CHECKOUT, PAYMENT, SUCCESS
+  const [idleTime, setIdleTime] = useState(0);
+  
+  // Estados para o PIX Dinâmico
+  const [qrCodeData, setQrCodeData] = useState(null);
+  const [currentOrderId, setCurrentOrderId] = useState(null);
+
+  // Auto-Reset de Abandono (Reseta o Totem após 2 minutos sem tocar no ecrã)
   useEffect(() => {
-    try {
-      sessionStorage.setItem(slot, JSON.stringify(draft));
-    } catch {
-      /* Keep the current in-memory attempt. */
+    let timer;
+    if (cart.length > 0 && step !== 'PAYMENT' && step !== 'SUCCESS') {
+      timer = setInterval(() => setIdleTime(prev => prev + 1), 1000);
     }
-  }, [draft, slot]);
-  useEffect(() => {
-    if (!configured) return;
-    let active = true;
-    rpc("checkout_menu", { p_token: token })
-      .then((data) => {
-        if (active) setMenu(data);
-      })
-      .catch(() => {
-        if (active)
-          setError(
-            "Este link não está disponível ou expirou. Solicite um novo link à loja.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [token]);
-  const sync = useCallback(async () => {
-    if (!draft.order) return;
-    try {
-      setStatus(await rpc("checkout_status", { p_tracking: draft.tracking }));
-    } catch {
-      setError(
-        "Não foi possível atualizar o pedido. Ele permanece registrado; tente novamente.",
-      );
+    
+    if (idleTime >= 120) {
+      resetTotem();
     }
-  }, [draft.order, draft.tracking]);
-  useEffect(() => {
-    if (!draft.order) return;
-    const t = setTimeout(sync, 0),
-      timer = setInterval(sync, 10000);
+
+    const resetIdle = () => setIdleTime(0);
+    window.addEventListener('click', resetIdle);
+    window.addEventListener('touchstart', resetIdle);
+
     return () => {
-      clearTimeout(t);
       clearInterval(timer);
+      window.removeEventListener('click', resetIdle);
+      window.removeEventListener('touchstart', resetIdle);
     };
-  }, [draft.order, sync]);
-  const frozen = Boolean(draft.order) || draft.submitted || busy;
-  function add(p) {
-    if (frozen) return;
-    const existing = draft.items.find(
-      (i) => i.id === p.id && !i.modifiers.length && !i.notes,
-    );
-    if (!existing && draft.items.length >= 30) {
-      setError("Limite de 30 linhas no pedido.");
-      return;
-    }
-    setDraft({
-      ...draft,
-      items: existing
-        ? draft.items.map((i) =>
-            i.lineId === existing.lineId
-              ? { ...i, quantity: Math.min(100, i.quantity + 1) }
-              : i,
-          )
-        : [
-            ...draft.items,
-            {
-              ...p,
-              lineId: crypto.randomUUID(),
-              quantity: 1,
-              modifiers: [],
-              notes: "",
-            },
-          ],
-    });
-  }
-  function update(id, change) {
-    if (frozen) return;
-    setDraft({
-      ...draft,
-      items: draft.items
-        .map((i) => (i.lineId === id ? { ...i, ...change } : i))
-        .filter((i) => i.quantity > 0),
-    });
-  }
-  async function submit(e) {
-    e.preventDefault();
-    if (!navigator.onLine) {
-      setError(
-        "Sem internet. Seu pedido ainda não foi confirmado. Reconecte e retome a mesma tentativa.",
-      );
-      return;
-    }
-    setBusy(true);
-    setError("");
-    setDraft((prev) => ({ ...prev, submitted: true }));
+  }, [idleTime, cart.length, step]);
+
+  const resetTotem = () => {
+    setCart([]);
+    setStep('MENU');
+    setIdleTime(0);
+    setQrCodeData(null);
+    setCurrentOrderId(null);
+  };
+
+  const addToCart = (product) => {
+    setCart([...cart, product]);
+    setIdleTime(0);
+  };
+
+  const total = cart.reduce((acc, item) => acc + item.price, 0);
+
+  // Integração PIX e Supabase Edge Functions
+  const handlePayment = async () => {
+    setStep('PAYMENT');
+    setQrCodeData(null); // Limpa QR Code anterior
+    
     try {
-      const order = await rpc("checkout_order", {
-        p_token: token,
-        p_key: draft.key,
-        p_tracking: draft.tracking,
-        p_contact: draft.contact,
-        p_items: draft.items.map((i) => ({
-          product_id: i.id,
-          quantity: i.quantity,
-          modifiers: i.modifiers,
-          notes: i.notes,
-        })),
+      // 1. Invoca a Edge Function para gerar o PIX
+      const { data, error } = await supabase.functions.invoke('checkout-payment', {
+        body: { total_amount: total, items: cart, source: 'totem' }
       });
-      setDraft((prev) => ({
-        ...prev,
-        order,
-        submitted: false,
-        contact: fresh().contact,
-        items: [],
-      }));
-    } catch (e) {
-      setError(e.message);
-      if (e.rejected) setDraft((prev) => ({ ...prev, submitted: false }));
-    } finally {
-      setBusy(false);
+
+      if (error) throw error;
+      
+      // 2. Guarda o payload do PIX e o ID do pedido
+      setQrCodeData(data.qr_code_payload); 
+      setCurrentOrderId(data.order_id);
+
+      // 3. Ouve ativamente o Supabase para a confirmação do pagamento
+      const channel = supabase
+        .channel(`order-${data.order_id}`)
+        .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'orders',
+          filter: `id=eq.${data.order_id}` 
+        }, (payload) => {
+          if (payload.new.status === 'preparing' || payload.new.status === 'paid') {
+            // Pagamento confirmado! Avança para o ecrã de sucesso
+            setStep('SUCCESS');
+            setTimeout(resetTotem, 5000); // Volta ao início após 5 segundos
+            supabase.removeChannel(channel); // Limpa a escuta
+          }
+        })
+        .subscribe();
+
+    } catch (err) {
+      console.error('Erro ao gerar PIX:', err);
+      alert('Ocorreu um erro ao gerar o pagamento. Por favor, tente novamente.');
+      setStep('CHECKOUT');
     }
-  }
-  async function pay() {
-    setBusy(true);
-    setError("");
-    try {
-      setIntent(
-        await invoke("checkout-payment", {
-          tracking: draft.tracking,
-          key: draft.paymentKey,
-        }),
-      );
-      await sync();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  const current = status || draft.order;
-  const pix = intent?.pix || status?.pix;
-  if (!configured)
-    return (
-      <main className="public-checkout">
-        <h1>Planeta Lanches</h1>
-        <p>
-          O autoatendimento ainda não foi configurado pela loja. Fale com a
-          equipe para fazer seu pedido.
-        </p>
-      </main>
-    );
+  };
+
   return (
-    <main className="public-checkout">
-      <header>
-        <img src="/brand/favicon.svg" alt="" />
-        <div>
-          <h1>Planeta Lanches</h1>
-          <p>{menu?.label || "Seu pedido, do seu jeito."}</p>
-        </div>
+    <div className="h-screen w-full bg-dark-900 text-white font-sans flex flex-col select-none">
+      
+      {/* HEADER DO TOTEM */}
+      <header className="bg-dark-800 p-6 flex justify-between items-center shadow-glass border-b border-dark-700">
+        <h1 className="text-4xl font-bold tracking-tighter">
+          Planeta<span className="text-brasa-500">Lanches</span>
+        </h1>
+        {step !== 'SUCCESS' && (
+          <button 
+            onClick={resetTotem}
+            className="bg-dark-700 text-gray-400 px-6 py-3 rounded-xl font-bold text-lg hover:text-white border border-dark-700 transition-colors"
+          >
+            Cancelar Pedido
+          </button>
+        )}
       </header>
-      {error && (
-        <p className="error-message" role="alert">
-          {error}
-        </p>
-      )}
-      {current ? (
-        <section className="management-panel">
-          <span className="eyebrow">PEDIDO #{current.number}</span>
-          <h2>{states[current.status] || current.status}</h2>
-          <strong className="public-total">{money(current.total_cents)}</strong>
-          <p>
-            {current.fulfillment_state === "dispatched"
-              ? "Seu pedido saiu para entrega."
-              : current.status === "pending_payment"
-                ? "O pedido só entra na cozinha após a confirmação do recebimento. Você também pode informar o número à equipe e pagar no caixa."
-                : "Acompanhe as atualizações nesta página."}
-          </p>
-          {current.status === "pending_payment" && (
-            <>
-              <p>
-                Pix Nubank: o administrador confere o crédito no extrato. Gerar
-                ou copiar o QR não confirma o pagamento.
-              </p>
-              <button className="primary" disabled={busy} onClick={pay}>
-                {pix ? "Retomar Pix do pedido" : "Gerar Pix com valor exato"}
+
+      {/* TELA DE MENU */}
+      {step === 'MENU' && (
+        <main className="flex-1 flex overflow-hidden">
+          <aside className="w-48 bg-dark-800 border-r border-dark-700 flex flex-col gap-2 p-4">
+            {['Destaques', 'Hambúrgueres', 'Bebidas'].map(cat => (
+              <button key={cat} className="h-20 bg-dark-900 rounded-xl font-bold text-lg border border-dark-700 text-gray-300 active:bg-brasa-500 active:text-white transition-colors">
+                {cat}
               </button>
-              {pix && (
-                <div className="pix-code">
-                  <QRCodeSVG value={pix.copyPaste} size={200} />
-                  <p>
-                    QR estático com o valor do pedido, sem expiração bancária
-                    automática.
-                  </p>
-                  <button
-                    className="secondary"
-                    onClick={() => navigator.clipboard.writeText(pix.copyPaste)}
-                  >
-                    Copiar código Pix
-                  </button>
-                  <code>{pix.copyPaste}</code>
+            ))}
+          </aside>
+
+          <section className="flex-1 p-8 grid grid-cols-3 gap-6 overflow-y-auto pb-32">
+            {/* Exemplo de Produto Fixo para o Template */}
+            <div 
+              onClick={() => addToCart({ name: 'Mega Planeta Burger', price: 32.90 })}
+              className="bg-dark-800 rounded-3xl p-6 border-2 border-dark-700 active:border-brasa-500 flex flex-col items-center text-center gap-4 cursor-pointer shadow-glass transition-all"
+            >
+              <div className="w-32 h-32 bg-dark-900 rounded-full border border-dark-700 mb-2"></div>
+              <h3 className="text-2xl font-bold text-white">Mega Planeta Burger</h3>
+              <span className="text-brasa-500 font-bold text-xl">R$ 32,90</span>
+            </div>
+          </section>
+
+          {cart.length > 0 && (
+            <div className="absolute bottom-0 left-48 right-0 p-6 bg-dark-800 border-t border-dark-700 shadow-2xl flex justify-between items-center z-10">
+              <div className="text-2xl font-bold">
+                <span className="text-gray-400 mr-2">{cart.length} itens</span>
+                <span className="text-white">R$ {total.toFixed(2)}</span>
+              </div>
+              <button 
+                onClick={() => setStep('CHECKOUT')}
+                className="bg-brasa-500 hover:bg-brasa-600 text-white text-2xl font-bold px-12 py-6 rounded-2xl shadow-brasa-glow active:scale-95 transition-all uppercase tracking-widest"
+              >
+                Revisar e Pagar
+              </button>
+            </div>
+          )}
+        </main>
+      )}
+
+      {/* TELA DE CHECKOUT */}
+      {step === 'CHECKOUT' && (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-dark-900">
+          <div className="w-full max-w-2xl bg-dark-800 p-8 rounded-3xl border border-dark-700 shadow-glass">
+            <h2 className="text-3xl font-bold mb-8 text-center text-white">Confira o seu Pedido</h2>
+            <div className="space-y-4 mb-8 max-h-96 overflow-y-auto">
+              {cart.map((item, i) => (
+                <div key={i} className="flex justify-between text-xl bg-dark-900 p-4 rounded-xl border border-dark-700 text-gray-200">
+                  <span className="font-bold">{item.name}</span>
+                  <span className="text-brasa-500 font-bold">R$ {item.price.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex justify-between items-center mb-8 border-t border-dark-700 pt-6">
+              <span className="text-2xl text-gray-400 font-bold">Total:</span>
+              <span className="text-4xl text-white font-bold">R$ {total.toFixed(2)}</span>
+            </div>
+
+            <button 
+              onClick={handlePayment}
+              className="w-full bg-green-500 hover:bg-green-600 text-white text-3xl font-bold py-6 rounded-2xl shadow-[0_4px_20px_-2px_rgba(34,197,94,0.4)] active:scale-95 transition-all uppercase tracking-widest"
+            >
+              Pagar com PIX
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TELA DE PAGAMENTO (CDS - QR CODE) */}
+      {step === 'PAYMENT' && (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-dark-900">
+          <div className="bg-dark-800 p-12 rounded-3xl border border-dark-700 shadow-brasa-glow flex flex-col items-center text-center w-full max-w-xl">
+            <h2 className="text-4xl font-bold mb-4 text-white">Escaneie para Pagar</h2>
+            <p className="text-gray-400 text-xl mb-8">Abra o app do seu banco e aponte a câmara</p>
+            
+            <div className="w-64 h-64 bg-white rounded-xl mb-8 flex items-center justify-center p-4">
+              {qrCodeData ? (
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrCodeData)}`} 
+                  alt="QR Code PIX" 
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center">
+                  <div className="w-10 h-10 border-4 border-gray-200 border-t-brasa-500 rounded-full animate-spin mb-4"></div>
+                  <span className="text-gray-500 font-bold">A gerar código PIX...</span>
                 </div>
               )}
-            </>
-          )}
-          <button className="text-button" onClick={sync}>
-            Atualizar status
-          </button>
-          {["completed", "cancelled"].includes(current.status) && (
-            <button
-              className="secondary"
-              onClick={() => {
-                setDraft(fresh());
-                setStatus(null);
-                setIntent(null);
-              }}
-            >
-              Começar outro pedido
-            </button>
-          )}
-          <p>
-            Guarde esta página neste dispositivo para acompanhar. O código de
-            acompanhamento é pessoal.
-          </p>
-        </section>
-      ) : menu ? (
-        <>
-          <label className="search-box">
-            <input
-              aria-label="Buscar no cardápio"
-              placeholder="Buscar um sabor…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          <div className="category-tabs">
-            <button
-              className={category === "all" ? "active" : ""}
-              onClick={() => setCategory("all")}
-            >
-              Todos
-            </button>
-            {[...new Set(menu.products.map((p) => p.category))].map((c) => (
-              <button
-                key={c}
-                className={category === c ? "active" : ""}
-                onClick={() => setCategory(c)}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-          <div className="public-product-grid">
-            {menu.products
-              .filter(
-                (p) =>
-                  (category === "all" || p.category === category) &&
-                  normalize(p.name + " " + p.description).includes(
-                    normalize(query),
-                  ),
-              )
-              .map((p) => (
-                <button
-                  className="product-card"
-                  key={p.id}
-                  disabled={frozen}
-                  onClick={() => add(p)}
-                  aria-label={`Adicionar ${p.name}`}
-                >
-                  <div className="product-image">
-                    <img
-                      src={p.image_path}
-                      alt={`Ilustração de ${p.name}`}
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="product-info">
-                    <h3>{p.name}</h3>
-                    <p>{p.description}</p>
-                    <div>
-                      <strong>{money(p.price_cents)}</strong>
-                      <span>＋</span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-          </div>
-          <form className="management-panel public-cart" onSubmit={submit}>
-            <h2>Seu pedido</h2>
-            {draft.items.map((i) => (
-              <article className="cart-line" key={i.lineId}>
-                <div className="report-row">
-                  <strong>
-                    {i.quantity}× {i.name}
-                  </strong>
-                  <b>{money(i.price_cents * i.quantity)}</b>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    disabled={frozen}
-                    aria-label={`Diminuir ${i.name}`}
-                    onClick={() =>
-                      update(i.lineId, { quantity: i.quantity - 1 })
-                    }
-                  >
-                    −
-                  </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    disabled={frozen}
-                    aria-label={`Aumentar ${i.name}`}
-                    onClick={() =>
-                      update(i.lineId, {
-                        quantity: Math.min(100, i.quantity + 1),
-                      })
-                    }
-                  >
-                    ＋
-                  </button>
-                </div>
-                <div className="modifier-options">
-                  {i.allowed_modifiers.map((m) => (
-                    <button
-                      type="button"
-                      key={m}
-                      disabled={frozen}
-                      className={i.modifiers.includes(m) ? "active" : ""}
-                      onClick={() =>
-                        update(i.lineId, {
-                          modifiers: toggleModifier(i.modifiers, m),
-                        })
-                      }
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-                <label>
-                  Detalhes para a cozinha · sem dados pessoais
-                  <textarea
-                    disabled={frozen}
-                    maxLength={500}
-                    value={i.notes}
-                    onChange={(e) =>
-                      update(i.lineId, { notes: e.target.value })
-                    }
-                  />
-                </label>
-              </article>
-            ))}
-            <div className="subtotal">
-              <span>Total · confirmado pelo sistema ao enviar</span>
-              <strong>
-                {money(
-                  draft.items.reduce(
-                    (s, i) => s + i.quantity * i.price_cents,
-                    0,
-                  ),
-                )}
-              </strong>
             </div>
-            <label>
-              Nome
-              <input
-                required
-                minLength={2}
-                maxLength={100}
-                value={draft.contact.name}
-                disabled={frozen}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    contact: { ...draft.contact, name: e.target.value },
-                  })
-                }
-              />
-            </label>
-            <label>
-              Telefone com DDD
-              <input
-                type="tel"
-                required={
-                  menu.channel === "delivery" || draft.contact.whatsapp_consent
-                }
-                pattern="\+?[0-9]{10,15}"
-                maxLength={16}
-                placeholder="5581999999999"
-                value={draft.contact.phone}
-                disabled={frozen}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    contact: { ...draft.contact, phone: e.target.value },
-                  })
-                }
-              />
-            </label>
-            {menu.channel === "delivery" && (
-              <label>
-                Endereço completo para entrega
-                <textarea
-                  required
-                  minLength={10}
-                  maxLength={500}
-                  value={draft.contact.address}
-                  disabled={frozen}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      contact: { ...draft.contact, address: e.target.value },
-                    })
-                  }
-                />
-              </label>
-            )}
-            <label className="check-label">
-              <input
-                type="checkbox"
-                disabled={frozen}
-                checked={draft.contact.whatsapp_consent}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    contact: {
-                      ...draft.contact,
-                      whatsapp_consent: e.target.checked,
-                    },
-                  })
-                }
-              />
-              Quero receber atualizações deste pedido pelo WhatsApp, quando o
-              serviço estiver habilitado.
-            </label>
-            <p>
-              Usamos seus dados para atender e entregar este pedido. Telefone e
-              endereço não são enviados à cozinha. Solicitações de acesso ou
-              exclusão podem ser feitas à administração da loja. Não há
-              autorização de marketing neste formulário.
-            </p>
-            <button
-              className="primary full"
-              disabled={!draft.items.length || busy}
-            >
-              {busy
-                ? "Enviando…"
-                : draft.submitted
-                  ? "Reenviar mesma tentativa"
-                  : "Enviar pedido e seguir para pagamento"}
-            </button>
-          </form>
-        </>
-      ) : (
-        !error && <div className="loading">Carregando cardápio…</div>
+
+            <p className="text-brasa-500 text-4xl font-bold mb-2">R$ {total.toFixed(2)}</p>
+            <p className="text-gray-500 text-sm animate-pulse">A aguardar confirmação do pagamento...</p>
+          </div>
+        </div>
       )}
-    </main>
+
+      {/* TELA DE SUCESSO */}
+      {step === 'SUCCESS' && (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-dark-900">
+          <div className="bg-dark-800 p-12 rounded-3xl border border-green-500/50 shadow-[0_4px_20px_-2px_rgba(34,197,94,0.4)] flex flex-col items-center text-center w-full max-w-xl">
+            <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6">
+              <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            <h2 className="text-4xl font-bold mb-4 text-white">Pagamento Confirmado!</h2>
+            <p className="text-gray-300 text-xl mb-2">O seu pedido já está a ser preparado na cozinha.</p>
+            <p className="text-brasa-500 text-2xl font-bold mt-4">
+              Senha: #{currentOrderId ? currentOrderId.slice(0,4).toUpperCase() : '0000'}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

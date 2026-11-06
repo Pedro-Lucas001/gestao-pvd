@@ -1,424 +1,178 @@
-import { useState, useEffect } from "react";
-import { supabase, rpc } from "../lib/supabase";
-import { command } from "./commands";
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+
 export default function Inventory() {
-  const [ingredients, setIngredients] = useState([]),
-    [products, setProducts] = useState([]),
-    [recipe, setRecipe] = useState([]),
-    [rules, setRules] = useState([]),
-    [product, setProduct] = useState(""),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [editing, setEditing] = useState(null);
-  async function load() {
-    const [i, p] = await Promise.all([
-      supabase.from("ingredients").select("*").order("name"),
-      supabase
-        .from("products")
-        .select("id,name,allowed_modifiers")
-        .order("name"),
-    ]);
-    if (i.error || p.error) setError("Não foi possível carregar os insumos.");
-    else {
-      setIngredients(i.data);
-      setProducts(p.data);
-    }
-  }
+  const [products, setProducts] = useState([]);
+  const [ingredients, setIngredients] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [recipe, setRecipe] = useState([]);
+  
+  // Estados para o formulário de adição de insumo
+  const [selectedIngredient, setSelectedIngredient] = useState('');
+  const [quantity, setQuantity] = useState('');
+
   useEffect(() => {
-    const t = setTimeout(load, 0);
-    return () => clearTimeout(t);
+    fetchBaseData();
   }, []);
-  async function run(fn) {
-    setBusy(true);
-    setError("");
-    try {
-      await fn();
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
+
+  const fetchBaseData = async () => {
+    const [prodRes, ingRes] = await Promise.all([
+      supabase.from('products').select('*').order('name'),
+      supabase.from('ingredients').select('*').order('name')
+    ]);
+    if (prodRes.data) setProducts(prodRes.data);
+    if (ingRes.data) setIngredients(ingRes.data);
+  };
+
+  const loadRecipe = async (product) => {
+    setSelectedProduct(product);
+    const { data } = await supabase
+      .from('technical_sheets')
+      .select('*, ingredients(name, unit)')
+      .eq('product_id', product.id);
+    
+    if (data) setRecipe(data);
+  };
+
+  const addIngredientToRecipe = async (e) => {
+    e.preventDefault();
+    if (!selectedProduct || !selectedIngredient || !quantity) return;
+
+    const newEntry = {
+      product_id: selectedProduct.id,
+      ingredient_id: selectedIngredient,
+      quantity_needed: parseFloat(quantity)
+    };
+
+    const { error } = await supabase.from('technical_sheets').insert(newEntry);
+    
+    if (!error) {
+      setQuantity('');
+      setSelectedIngredient('');
+      loadRecipe(selectedProduct); // Recarrega a lista
+    } else {
+      alert('Erro ao vincular insumo. Verifique se já existe na ficha.');
     }
-  }
-  async function choose(id) {
-    setProduct(id);
-    const { data: modifierRules } = await supabase
-      .from("recipe_modifier_rules")
-      .select("modifier,ingredient_id,quantity_delta")
-      .eq("product_id", id);
-    setRules(modifierRules || []);
-    const { data, error } = await supabase
-      .from("recipe_items")
-      .select("ingredient_id,quantity")
-      .eq("product_id", id);
-    if (error) setError("Não foi possível carregar a ficha.");
-    else setRecipe(data);
-  }
+  };
+
+  const removeIngredient = async (sheetId) => {
+    await supabase.from('technical_sheets').delete().eq('id', sheetId);
+    loadRecipe(selectedProduct);
+  };
+
   return (
-    <section className="management">
-      <span className="eyebrow">ESTOQUE E FICHAS</span>
-      <h1>Cada insumo sob controle.</h1>
-      <p>
-        Cadastre quantidades e custos reais. As vendas baixam a receita padrão
-        uma única vez; saldo negativo gera alerta e exige conferência.
-      </p>
-      {error && (
-        <p className="error-message" role="alert">
-          {error}
-        </p>
-      )}
-      <button className="primary" onClick={() => setEditing({})}>
-        Novo insumo
-      </button>
-      {editing && (
-        <form
-          className="management-panel form-columns"
-          key={editing.id || "new"}
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            run(async () => {
-              await rpc("save_ingredient", {
-                p_id: editing.id || null,
-                p_name: f.get("name"),
-                p_unit: f.get("unit"),
-                p_minimum: Number(f.get("minimum")),
-                p_cost: Number((Number(f.get("cost")) * 100).toFixed(4)),
-                p_reason: f.get("reason"),
-              });
-              setEditing(null);
-            });
-          }}
-        >
-          <label>
-            Insumo
-            <input
-              name="name"
-              required
-              minLength={2}
-              maxLength={120}
-              defaultValue={editing.name}
-            />
-          </label>
-          <label>
-            Unidade
-            <select name="unit" defaultValue={editing.unit || "un"}>
-              <option value="un">Unidade</option>
-              <option value="g">Gramas</option>
-              <option value="ml">Mililitros</option>
-            </select>
-          </label>
-          <label>
-            Estoque mínimo
-            <input
-              name="minimum"
-              type="number"
-              min="0"
-              step="0.001"
-              required
-              defaultValue={editing.minimum_stock || 0}
-            />
-          </label>
-          <label>
-            Custo em R$ por unidade/g/ml
-            <input
-              name="cost"
-              type="number"
-              min="0"
-              step="0.000001"
-              required
-              defaultValue={
-                editing.id ? Number(editing.unit_cost_cents || 0) / 100 : ""
-              }
-            />
-          </label>
-          <label className="span-all">
-            Justificativa
-            <input name="reason" required minLength={5} maxLength={500} />
-          </label>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => setEditing(null)}
-          >
-            Fechar edição
-          </button>
-          <button className="primary" disabled={busy}>
-            Salvar insumo
-          </button>
-        </form>
-      )}
-      <article className="management-panel">
-        <h2>Saldos atuais</h2>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Insumo</th>
-                <th>Saldo</th>
-                <th>Mínimo</th>
-                <th>Custo em centavos/un.</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {ingredients.map((i) => (
-                <tr
-                  key={i.id}
-                  className={
-                    Number(i.stock) <= Number(i.minimum_stock)
-                      ? "stock-alert"
-                      : ""
-                  }
-                >
-                  <td>{i.name}</td>
-                  <td>
-                    {i.stock} {i.unit}
-                  </td>
-                  <td>{i.minimum_stock}</td>
-                  <td>{i.unit_cost_cents}</td>
-                  <td>
-                    <button
-                      className="text-button"
-                      onClick={() => setEditing(i)}
-                    >
-                      Editar cadastro
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="min-h-screen bg-dark-900 text-white font-sans p-8 flex gap-8">
+      
+      {/* COLUNA ESQUERDA: Lista de Produtos */}
+      <aside className="w-1/3 bg-dark-800 border border-dark-700 rounded-2xl flex flex-col overflow-hidden shadow-glass">
+        <div className="p-6 border-b border-dark-700 bg-dark-900">
+          <h2 className="text-xl font-bold text-white">Cardápio</h2>
+          <p className="text-gray-400 text-sm">Selecione para editar a ficha</p>
         </div>
-      </article>
-      <div className="management-grid">
-        <form
-          className="management-panel"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            run(() =>
-              command("adjust_stock", {
-                p_id: f.get("ingredient"),
-                p_delta: Number(f.get("delta")),
-                p_reason: f.get("reason"),
-              }),
-            );
-          }}
-        >
-          <h2>Entrada, perda ou correção</h2>
-          <label>
-            Insumo
-            <select name="ingredient" required>
-              {ingredients.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name} · {i.unit}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Quantidade · use negativo para saída
-            <input name="delta" type="number" step="0.001" required />
-          </label>
-          <label>
-            Justificativa
-            <input name="reason" required minLength={5} maxLength={500} />
-          </label>
-          <button className="primary" disabled={busy || !ingredients.length}>
-            Registrar movimento
-          </button>
-        </form>
-        <form
-          className="management-panel"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            run(() =>
-              rpc("save_recipe", {
-                p_product: product,
-                p_items: recipe.map((i) => ({
-                  ingredient_id: i.ingredient_id,
-                  quantity: Number(i.quantity),
-                })),
-                p_rules: rules.map((r) => ({
-                  ...r,
-                  quantity_delta: Number(r.quantity_delta),
-                })),
-                p_reason: f.get("reason"),
-              }),
-            );
-          }}
-        >
-          <h2>Ficha técnica</h2>
-          <label>
-            Produto
-            <select
-              required
-              value={product}
-              onChange={(e) => choose(e.target.value)}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {products.map(prod => (
+            <button
+              key={prod.id}
+              onClick={() => loadRecipe(prod)}
+              className={`w-full text-left p-4 rounded-xl border transition-all font-bold ${
+                selectedProduct?.id === prod.id 
+                  ? 'bg-brasa-500/10 border-brasa-500 text-brasa-500' 
+                  : 'bg-dark-900 border-dark-700 text-gray-300 hover:border-gray-500'
+              }`}
             >
-              <option value="">Selecione o produto</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {recipe.map((r, index) => (
-            <div className="recipe-row" key={index}>
-              <select
-                aria-label={`Insumo ${index + 1}`}
-                required
-                value={r.ingredient_id}
-                onChange={(e) =>
-                  setRecipe(
-                    recipe.map((x, i) =>
-                      i === index ? { ...x, ingredient_id: e.target.value } : x,
-                    ),
-                  )
-                }
-              >
-                <option value="">Insumo</option>
-                {ingredients.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name} · {i.unit}
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label={`Quantidade ${index + 1}`}
-                type="number"
-                step="0.001"
-                min="0.001"
-                required
-                value={r.quantity}
-                onChange={(e) =>
-                  setRecipe(
-                    recipe.map((x, i) =>
-                      i === index ? { ...x, quantity: e.target.value } : x,
-                    ),
-                  )
-                }
-              />
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={`Remover insumo ${index + 1}`}
-                onClick={() => setRecipe(recipe.filter((_, i) => i !== index))}
-              >
-                ×
-              </button>
-            </div>
+              {prod.name}
+            </button>
           ))}
-          <button
-            className="text-button"
-            type="button"
-            onClick={() =>
-              setRecipe([...recipe, { ingredient_id: "", quantity: 1 }])
-            }
-          >
-            ＋ Adicionar insumo
-          </button>
-          <h3>Regras por modificador</h3>
-          <p>
-            Use quantidade negativa para excluir um insumo, positiva para
-            adicionar. Configure as quantidades reais; o consumo final nunca
-            fica negativo.
-          </p>
-          {rules.map((r, index) => (
-            <div className="modifier-rule" key={index}>
-              <select
-                aria-label={`Modificador ${index + 1}`}
-                required
-                value={r.modifier}
-                onChange={(e) =>
-                  setRules(
-                    rules.map((x, i) =>
-                      i === index ? { ...x, modifier: e.target.value } : x,
-                    ),
-                  )
-                }
-              >
-                <option value="">Modificador</option>
-                {(
-                  products.find((p) => p.id === product)?.allowed_modifiers ||
-                  []
-                ).map((m) => (
-                  <option key={m}>{m}</option>
-                ))}
-              </select>
-              <select
-                aria-label={`Insumo do modificador ${index + 1}`}
-                required
-                value={r.ingredient_id}
-                onChange={(e) =>
-                  setRules(
-                    rules.map((x, i) =>
-                      i === index ? { ...x, ingredient_id: e.target.value } : x,
-                    ),
-                  )
-                }
-              >
-                <option value="">Insumo</option>
-                {ingredients.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name} · {i.unit}
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label={`Variação de quantidade ${index + 1}`}
-                type="number"
-                step="0.001"
-                required
-                value={r.quantity_delta}
-                onChange={(e) =>
-                  setRules(
-                    rules.map((x, i) =>
-                      i === index
-                        ? { ...x, quantity_delta: e.target.value }
-                        : x,
-                    ),
-                  )
-                }
-              />
-              <button
-                type="button"
-                className="icon-button"
-                aria-label={`Remover regra ${index + 1}`}
-                onClick={() => setRules(rules.filter((_, i) => i !== index))}
-              >
-                ×
-              </button>
+        </div>
+      </aside>
+
+      {/* COLUNA DIREITA: Construtor da Ficha Técnica */}
+      <main className="flex-1 bg-dark-800 border border-dark-700 rounded-2xl shadow-glass flex flex-col overflow-hidden">
+        {selectedProduct ? (
+          <>
+            <div className="p-6 border-b border-dark-700 flex justify-between items-center bg-dark-900">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Ficha Técnica</h2>
+                <h3 className="text-brasa-500 text-lg font-bold">{selectedProduct.name}</h3>
+              </div>
+              <span className="bg-dark-800 text-gray-400 px-4 py-2 rounded-lg text-sm border border-dark-700">
+                Custo Estimado: R$ --
+              </span>
             </div>
-          ))}
-          <button
-            type="button"
-            className="text-button"
-            onClick={() =>
-              setRules([
-                ...rules,
-                { modifier: "", ingredient_id: "", quantity_delta: -1 },
-              ])
-            }
-          >
-            ＋ Adicionar regra de modificador
-          </button>
-          <label>
-            Justificativa
-            <input name="reason" required minLength={5} maxLength={500} />
-          </label>
-          <button className="primary" disabled={!product || busy}>
-            Salvar receita
-          </button>
-          <p>
-            Receita vazia desativa a baixa automática desse produto. Alterações
-            não reescrevem as vendas passadas.
-          </p>
-        </form>
-      </div>
-    </section>
+
+            <div className="p-6 flex-1 overflow-y-auto">
+              {/* Formulário de Adição Rápida */}
+              <form onSubmit={addIngredientToRecipe} className="flex gap-4 mb-8 bg-dark-900 p-4 rounded-xl border border-dark-700">
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Insumo</label>
+                  <select 
+                    value={selectedIngredient}
+                    onChange={(e) => setSelectedIngredient(e.target.value)}
+                    className="w-full bg-dark-800 border border-dark-700 rounded-lg p-3 text-white focus:border-brasa-500 outline-none"
+                  >
+                    <option value="">Selecione...</option>
+                    {ingredients.map(ing => (
+                      <option key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-48">
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Quantidade</label>
+                  <input 
+                    type="number" 
+                    step="0.001" 
+                    min="0"
+                    placeholder="Ex: 0.150"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    className="w-full bg-dark-800 border border-dark-700 rounded-lg p-3 text-white focus:border-brasa-500 outline-none"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button type="submit" className="bg-brasa-500 hover:bg-brasa-600 text-white font-bold px-6 py-3 rounded-lg shadow-brasa-glow transition-all">
+                    Vincular
+                  </button>
+                </div>
+              </form>
+
+              {/* Lista da Ficha Técnica */}
+              <div className="space-y-3">
+                {recipe.length === 0 ? (
+                  <div className="text-center p-12 border-2 border-dashed border-dark-700 rounded-xl text-gray-500 font-bold">
+                    Nenhum insumo vinculado a este produto.
+                  </div>
+                ) : (
+                  recipe.map(item => (
+                    <div key={item.id} className="flex justify-between items-center bg-dark-900 p-4 rounded-xl border border-dark-700 group hover:border-dark-500 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-dark-800 rounded-lg border border-dark-700 flex items-center justify-center font-bold text-brasa-500">
+                          {item.quantity_needed}
+                        </div>
+                        <div>
+                          <p className="font-bold text-white text-lg">{item.ingredients?.name}</p>
+                          <p className="text-sm text-gray-400 uppercase tracking-wider">Medida: {item.ingredients?.unit}</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => removeIngredient(item.id)}
+                        className="text-gray-500 hover:text-red-500 p-2 transition-colors"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+            <svg className="w-24 h-24 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+            <p className="text-xl font-bold">Selecione um produto</p>
+            <p className="text-sm mt-2">Para visualizar e editar a sua ficha técnica</p>
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

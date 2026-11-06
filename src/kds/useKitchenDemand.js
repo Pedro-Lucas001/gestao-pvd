@@ -1,78 +1,59 @@
-import { useEffect, useId, useState } from "react";
-import { rpc, supabase } from "../lib/supabase";
-import { calculateDemand } from "./demand";
-export function useKitchenDemand(enabled = true) {
-  const channelId = useId();
-  const [state, setState] = useState({
-    stations: [],
-    loading: true,
-    error: "",
-    connected: false,
-    updatedAt: null,
+import { useState, useEffect } from 'react';
+
+export function useKitchenDemand(activeOrders) {
+  const [demandStatus, setDemandStatus] = useState({
+    level: 'NORMAL', // NORMAL, WARNING, CRITICAL
+    message: 'Chapa Normal',
+    color: 'bg-green-500',
+    pendingBurgers: 0
   });
+
   useEffect(() => {
-    if (!enabled || !supabase) return;
-    let alive = true, inFlight = false, pending = false;
-    async function sync() {
-      if (!alive) return;
-      if (inFlight) {
-        pending = true;
-        return;
-      }
-      inFlight = true;
-      try {
-        const rows = await rpc("kitchen_load_snapshot");
-        if (!Array.isArray(rows)) throw new Error("INVALID_DEMAND_RESPONSE");
-        if (alive) {
-          setState((previous) => ({
-            ...previous,
-            stations: rows.map(calculateDemand),
-            loading: false,
-            error: "",
-            updatedAt: Date.now(),
-          }));
-        }
-      } catch {
-        if (alive) {
-          setState((previous) => ({
-            ...previous,
-            loading: false,
-            error: "Não foi possível atualizar a demanda. Confira a conexão.",
-          }));
-        }
-      } finally {
-        inFlight = false;
-        if (alive && pending) {
-          pending = false;
-          sync();
-        }
-      }
+    if (!activeOrders || activeOrders.length === 0) {
+      setDemandStatus({ level: 'NORMAL', message: 'Fila Vazia', color: 'bg-gray-500', pendingBurgers: 0 });
+      return;
     }
-    const start = setTimeout(sync, 0);
-    const channel = supabase.channel(`station-load:${channelId}`).on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "kitchen_station_load" },
-      sync,
-    ).subscribe((status) => {
-      if (alive) {
-        setState((previous) => ({
-          ...previous,
-          connected: status === "SUBSCRIBED",
-        }));
-      }
-      if (status === "SUBSCRIBED") sync();
+
+    // Algoritmo Preditivo: Conta a quantidade de itens complexos (ex: hambúrgueres)
+    let totalBurgers = 0;
+    
+    activeOrders.forEach(order => {
+      order.items?.forEach(item => {
+        // Se o nome do produto incluir "Burger", "Dogão" ou for uma categoria de chapa
+        if (item.name.toLowerCase().includes('burger') || item.name.toLowerCase().includes('dogão')) {
+          totalBurgers += item.quantity;
+        }
+      });
     });
-    const timer = setInterval(() => {
-      if (navigator.onLine) sync();
-    }, 10000);
-    window.addEventListener("online", sync);
-    return () => {
-      alive = false;
-      clearTimeout(start);
-      clearInterval(timer);
-      window.removeEventListener("online", sync);
-      supabase.removeChannel(channel);
-    };
-  }, [enabled, channelId]);
-  return state;
+
+    // Define os limites operacionais da lanchonete (ajustável)
+    const WARNING_THRESHOLD = 8;  // A partir de 8 hambúrgueres na fila, a chapa começa a apertar
+    const CRITICAL_THRESHOLD = 15; // 15+ significa que o tempo de espera vai estourar
+
+    if (totalBurgers >= CRITICAL_THRESHOLD) {
+      setDemandStatus({
+        level: 'CRITICAL',
+        message: `Sobrecarga: ${totalBurgers} na chapa!`,
+        color: 'bg-red-500',
+        pendingBurgers: totalBurgers
+      });
+    } else if (totalBurgers >= WARNING_THRESHOLD) {
+      setDemandStatus({
+        level: 'WARNING',
+        message: `Atenção: ${totalBurgers} na fila`,
+        color: 'bg-yellow-500',
+        pendingBurgers: totalBurgers
+      });
+    } else {
+      setDemandStatus({
+        level: 'NORMAL',
+        message: 'Fluxo Controlado',
+        color: 'bg-green-500',
+        pendingBurgers: totalBurgers
+      });
+    }
+
+  }, [activeOrders]);
+
+  return demandStatus;
 }

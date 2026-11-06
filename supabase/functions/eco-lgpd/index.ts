@@ -1,43 +1,51 @@
-import { cors } from "../_shared/http.ts";
-import { bodyJson, ecoRpc, json } from "../_shared/eco.ts";
-Deno.serve(async (req: Request) => {
-  const headers = cors(req);
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: headers ? 204 : 403,
-      headers: headers || {},
-    });
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
-  if (req.method !== "POST") {
-    return json({ error: "METHOD_NOT_ALLOWED" }, 405, headers || {});
-  }
-  if (req.headers.has("Origin") && !headers) {
-    return json({ error: "ORIGIN_DENIED" }, 403);
-  }
+
   try {
-    const body = await bodyJson(req);
-    if (
-      typeof body.token !== "string" || !/^[a-f0-9]{64}$/.test(body.token) ||
-      !["acesso", "anonimizacao", "consentir_anuncios", "revogar_anuncios"]
-        .includes(String(body.acao))
-    ) return json({ error: "INVALID_REQUEST" }, 400, headers || {});
-    return json(
-      await ecoRpc("eco_privacy_request", {
-        p_token: body.token,
-        p_acao: body.acao,
-      }),
-      200,
-      headers || {},
-    );
-  } catch (e) {
-    return json(
-      {
-        error: e instanceof RangeError
-          ? "PAYLOAD_TOO_LARGE"
-          : "LINK_INVALID_OR_OPERATION_UNAVAILABLE",
-      },
-      e instanceof RangeError ? 413 : 403,
-      headers || {},
-    );
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    const { phone, action } = await req.json()
+
+    if (action === 'delete') {
+      // Chama a função SQL RPC que criámos
+      const { data, error } = await supabaseClient.rpc('anonymize_customer_data', {
+        target_phone: phone
+      })
+
+      if (error) throw error
+
+      if (data) {
+        return new Response(
+          JSON.stringify({ success: true, message: 'Dados anonimizados com sucesso.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        )
+      } else {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Cliente não encontrado.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+        )
+      }
+    }
+
+    throw new Error('Ação não suportada')
+
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+    )
   }
-});
+})
