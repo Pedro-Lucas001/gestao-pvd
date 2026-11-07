@@ -24,9 +24,11 @@ begin
  update public.online_payments set creation_state='creating',creation_lease_until=now()+interval '1 minute' where id=p.id;
  return case when p.creation_state='new' then 'new' else 'recover' end;
 end $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_claim_payment_creation' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 create function public.online_uncertain_payment(p_payment uuid) returns void language sql security definer set search_path='' as $$
  update public.online_payments set creation_state='uncertain',creation_lease_until=null where id=p_payment and creation_state='creating'
 $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_uncertain_payment' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 
 -- A referência bancária não pode conciliar simultaneamente uma venda PDV e uma online.
 create table app_private.manual_bank_references(reference text primary key,payment_identity text not null unique);
@@ -52,6 +54,7 @@ begin
  perform public.online_confirm_payment(p.id,p.amount_cents,'manual-pix:'||ref,'manual_pix','manual:'||p.id::text,encode(extensions.digest(ref,'sha256'),'hex'));
  perform app_private.log('online.manual_pix_confirmed','online_order',p.order_id::text,p.amount_cents);
 end $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_confirm_manual_pix' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 
 create or replace function public.cash_summary(p_shift uuid) returns jsonb language plpgsql security definer set search_path='' as $$
 declare turn public.shifts;paid bigint;movements bigint;online_paid bigint;
@@ -68,6 +71,7 @@ begin
  if not app_private.is_admin() then raise exception 'access_denied' using errcode='42501';end if;
  return jsonb_build_object('received_cents',(select coalesce(sum(amount_cents),0) from public.online_payments where status='confirmed'),'refunded_cents',(select coalesce(sum(amount_cents),0) from public.online_refunds),'receivable_cents',(select coalesce(sum(greatest(0,total_cents-paid_cents)),0) from public.online_orders where status not in ('cancelled','awaiting_store')),'refund_due_cents',(select coalesce(sum(greatest(0,paid_cents-total_cents)),0) from public.online_orders),'stock_cost_cents',(select coalesce(round(sum(-quantity*unit_cost_cents)),0) from public.online_stock_movements));
 end $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_admin_metrics' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 
 create function public.online_claim_notifications() returns jsonb language plpgsql security definer set search_path='' as $$
 declare job record;result jsonb:='[]';payment jsonb;
@@ -82,12 +86,15 @@ begin
   result:=result||jsonb_build_array(jsonb_build_object('id',job.id,'topic',job.topic,'number',job.number,'due_cents',job.due_cents,'phone',job.phone,'payment',payment,'within_window',exists(select 1 from public.whatsapp_inbox i where i.sender=job.phone and i.received_at>now()-interval '23 hours')));
  end loop;return result;
 end $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_claim_notifications' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 create function public.online_finish_notification(p_id uuid,p_success boolean,p_error text default null) returns void language sql security definer set search_path='' as $$
  update public.online_notifications set delivered_at=case when p_success then now() else null end,lease_until=null,next_attempt_at=now()+make_interval(secs=>least(3600,30*power(2,least(attempts,7))::int)),last_error=case when p_success then null else left(p_error,80) end where id=p_id and lease_until is not null
 $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_finish_notification' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 create function public.online_assistant_catalog() returns jsonb language sql stable security definer set search_path='' as $$
  select jsonb_build_object('settings',public.online_shop_config(),'products',coalesce(jsonb_agg(jsonb_build_object('product_id',p.id,'name',p.name,'description',p.description,'category',p.category,'image_path',p.image_path,'price_cents',p.price_cents,'allowed_modifiers',p.allowed_modifiers) order by p.category,p.name),'[]')) from public.products p where p.active
 $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_assistant_catalog' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 create function public.online_automation_allowed(p_sender text,p_handoff boolean default false) returns boolean language plpgsql security definer set search_path='' as $$
 begin
  if p_handoff then
@@ -96,12 +103,14 @@ begin
  end if;
  return not exists(select 1 from app_private.online_handoffs where sender=p_sender and paused_until>now()) and not exists(select 1 from public.whatsapp_inbox where sender=p_sender and assigned_to is not null and closed_at is null);
 end $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_automation_allowed' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 create function public.online_resume_automation(p_sender text,p_reason text) returns void language plpgsql security definer set search_path='' as $$
 begin
  if not app_private.is_admin() then raise exception 'access_denied' using errcode='42501';end if;perform app_private.reason(p_reason);
  delete from app_private.online_handoffs where sender=p_sender;
  perform app_private.log('online.automation_resumed','conversation',encode(extensions.digest(p_sender,'sha256'),'hex'));
 end $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_resume_automation' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 revoke all on function app_private.online_payment(uuid,uuid),app_private.unique_manual_bank_reference() from public,anon,authenticated;
 grant execute on function public.online_claim_payment_creation(uuid),public.online_uncertain_payment(uuid),public.online_claim_notifications(),public.online_finish_notification(uuid,boolean,text),public.online_assistant_catalog(),public.online_automation_allowed(text,boolean) to service_role;
 grant execute on function public.online_confirm_manual_pix(uuid,text,text),public.online_admin_metrics(),public.online_resume_automation(text,text) to authenticated;
@@ -111,10 +120,12 @@ begin
  o:=app_private.online_resolve(p_tracking);q:=app_private.online_items(p_items);
  return q||jsonb_build_object('delivery_fee_cents',o.delivery_fee_cents,'total_cents',(q->>'subtotal_cents')::int+o.delivery_fee_cents);
 end $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_change_quote' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 grant execute on function public.online_change_quote(text,jsonb) to service_role;
 create function public.online_assistant_history(p_sender text) returns jsonb language sql stable security definer set search_path='' as $$
  select coalesce(jsonb_agg(jsonb_build_object('role','user','content',t.body) order by t.received_at),'[]') from(select body,received_at from public.whatsapp_inbox where sender=p_sender and received_at>now()-interval '23 hours' order by received_at desc limit 6) t
 $$;
+do $priv$ declare f regprocedure;begin for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='online_assistant_history' loop execute format('revoke all on function %s from public,anon,authenticated,service_role',f);end loop;end $priv$;
 grant execute on function public.online_assistant_history(text) to service_role;
 -- Abertura/fechamento e recebimento compartilham o lock do turno.
 create or replace function public.close_shift(p_shift uuid,p_counted_cents int,p_reason text) returns void language plpgsql security definer set search_path='' as $$

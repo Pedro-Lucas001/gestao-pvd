@@ -355,6 +355,13 @@ begin
  insert into public.online_notifications(order_id,topic,revision) values(o.id,'order.'||p_next,o.revision) on conflict do nothing;
 end $$;
 
+-- Privilégios por função explícitos: revogar defaults por schema não remove
+-- o EXECUTE global padrão do PostgreSQL para funções recém-criadas.
+do $priv$ declare f regprocedure;begin
+ for f in select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'online\_%' escape '\' loop
+  execute format('revoke all on function %s from public,anon,authenticated,service_role',f);
+ end loop;
+end $priv$;
 -- Nenhuma tabela online pode ser lida ou alterada diretamente por visitantes.
 alter table public.online_shop_settings enable row level security;
 alter table public.online_orders enable row level security;
