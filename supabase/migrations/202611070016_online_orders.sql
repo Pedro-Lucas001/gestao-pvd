@@ -111,6 +111,7 @@ begin
  if p_fulfillment not in ('pickup','delivery') or p_fulfillment is null then raise exception 'invalid_fulfillment';end if;
  if p_fulfillment='delivery' and not s.delivery_enabled then raise exception 'delivery_unavailable';end if;
  c:=app_private.online_items(p_items);fee:=case when p_fulfillment='delivery' then s.delivery_fee_cents else 0 end;
+ if (c->>'subtotal_cents')::int+fee>1000000 then raise exception 'order_too_large';end if;
  return c||jsonb_build_object('delivery_fee_cents',fee,'total_cents',(c->>'subtotal_cents')::int+fee);
 end $$;
 create function public.online_create_order(p_key uuid,p_tracking text,p_items jsonb,p_contact jsonb,p_fulfillment text,p_method text,p_change_for int,p_expected_total int) returns jsonb language plpgsql security definer set search_path='' as $$
@@ -211,18 +212,19 @@ begin
  select * into c from public.online_changes where id=p_change for update;if not found then raise exception 'change_unavailable';end if;
  if not (app_private.is_admin() or coalesce(app_private.role()='kitchen' and app_private.terminal_open() and (select p.sector from public.profiles p where p.id=auth.uid())=any(c.sectors),false)) then raise exception 'access_denied' using errcode='42501';end if;
  if c.status<>'requested' then return;end if;
- if p_accept is null or length(trim(coalesce(p_reason,''))) not between 3 and 500 then raise exception 'review_reason_required';end if;
+ if p_accept is null or length(trim(coalesce(p_reason,''))) not between 5 and 500 then raise exception 'review_reason_required';end if;
  select * into o from public.online_orders where id=c.order_id for update;
  if o.revision<>c.base_revision or o.status not in ('accepted','preparing') then raise exception 'change_stale';end if;
+ perform app_private.reason(p_reason);
  if not p_accept then update public.online_changes set status='rejected',review_reason=trim(p_reason),reviewed_by=auth.uid(),reviewed_at=now() where id=c.id;
-  insert into public.online_notifications(order_id,topic,revision) values(o.id,'change.rejected:'||c.id,o.revision) on conflict do nothing;return;end if;
+  insert into public.online_notifications(order_id,topic,revision) values(o.id,'change.rejected:'||c.id,o.revision) on conflict do nothing;perform app_private.log('online.change_rejected','online_order',o.id::text);return;end if;
  if app_private.is_admin() then
   insert into app_private.online_change_votes select c.id,s,auth.uid() from unnest(c.sectors) s on conflict do nothing;
  else
   select p.sector into sector from public.profiles p where p.id=auth.uid();
   insert into app_private.online_change_votes values(c.id,sector,auth.uid()) on conflict do nothing;
  end if;
- if exists(select 1 from unnest(c.sectors) s where not exists(select 1 from app_private.online_change_votes v where v.change_id=c.id and v.sector=s)) then return;end if;
+ if exists(select 1 from unnest(c.sectors) s where not exists(select 1 from app_private.online_change_votes v where v.change_id=c.id and v.sector=s)) then perform app_private.log('online.change_sector_approved','online_order',o.id::text);return;end if;
  update public.online_changes set status='accepted',review_reason=trim(p_reason),reviewed_by=auth.uid(),reviewed_at=now() where id=c.id;
  update public.online_orders set items=c.items,subtotal_cents=c.subtotal_cents,total_cents=c.total_cents,revision=revision+1,updated_at=now(),
  payment_method=case when paid_cents>0 and c.total_cents>paid_cents then 'pix' else payment_method end,

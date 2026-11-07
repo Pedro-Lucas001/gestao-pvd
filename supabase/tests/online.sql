@@ -15,6 +15,10 @@ insert into public.ingredients(id,name,unit,stock,unit_cost_cents) values('c2000
 insert into public.recipe_items values('test-online-burger','c2000000-0000-0000-0000-000000000001',1);
 select set_config('test.items','[{"product_id":"test-online-burger","quantity":1,"unit_price_cents":1},{"product_id":"test-online-burger","quantity":1,"modifiers":["Sem cebola"]},{"product_id":"test-online-drink","quantity":1}]',true);
 select set_config('test.contact','{"name":"Cliente confidencial","phone":"5581999999999","email":"fixture@example.test","address":"Rua confidencial 123","whatsapp_consent":true}',true);
+select pg_temp.assert(not has_function_privilege('anon','public.claim_message_replies()','execute') and not has_function_privilege('authenticated','public.ingest_whatsapp(text,text,text,timestamptz)','execute'),'fila WhatsApp não expõe clientes nem aceita mensagens forjadas do navegador');
+select pg_temp.assert(not has_function_privilege('anon','public.online_confirm_payment(uuid,int,text,text,text,text)','execute') and not has_function_privilege('authenticated','public.online_confirm_payment(uuid,int,text,text,text,text)','execute'),'ninguém no navegador confirma recebimento de provedor');
+select pg_temp.assert(not has_function_privilege('anon','public.online_create_order(uuid,text,jsonb,jsonb,text,text,int,int)','execute') and not has_function_privilege('authenticated','public.online_create_order(uuid,text,jsonb,jsonb,text,text,int,int)','execute'),'criação exige Edge e seus limites');
+select pg_temp.assert(not has_function_privilege('anon','public.online_assistant_catalog()','execute') and not has_function_privilege('authenticated','public.online_claim_notifications()','execute'),'integrações privadas exigem serviço');
 set local role anon;
 do $$begin
  begin perform public.online_order_status(repeat('a',64));raise exception 'ASSERT: visitante leu RPC privado';exception when insufficient_privilege then null;end;
@@ -45,6 +49,9 @@ do $$begin
  begin perform public.online_admin_metrics();raise exception 'ASSERT: cozinha acessou finanças';exception when insufficient_privilege then null;end;
 end $$;
 select public.online_kitchen_work(current_setting('test.order')::uuid,'grill',1,'preparing');
+select set_config('request.jwt.claims','{"sub":"c0000000-0000-0000-0000-000000000003","session_id":"online-test"}',true);
+select public.online_kitchen_work(current_setting('test.order')::uuid,'bar',1,'preparing');
+select public.online_kitchen_work(current_setting('test.order')::uuid,'bar',1,'ready');
 set local role service_role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 select set_config('test.revised','[{"product_id":"test-online-burger","quantity":2},{"product_id":"test-online-burger","quantity":1,"modifiers":["Sem cebola"]},{"product_id":"test-online-drink","quantity":1}]',true);
@@ -69,6 +76,19 @@ end $$;
 select public.online_confirm_payment('c4000000-0000-0000-0000-000000000002',1000,'mp:test2','mercadopago','event2','hash2');
 reset role;
 select pg_temp.assert((select stock=97 from public.ingredients where id='c2000000-0000-0000-0000-000000000001'),'somente diferença de insumos baixada');
+select pg_temp.assert((select status='ready' and revision=2 from public.online_kitchen_jobs where order_id=current_setting('test.order')::uuid and sector='bar'),'setor inalterado não precisa refazer o que terminou');
+-- Redução paga gera saldo a devolver, sem retorno automático de insumos.
+set local role service_role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+select public.online_request_change(repeat('a',64),'c5000000-0000-0000-0000-000000000002','[{"product_id":"test-online-burger","quantity":1}]','Remover itens ainda não usados',1000);
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"c0000000-0000-0000-0000-000000000001","session_id":"online-test"}',true);
+select public.online_review_change('c5000000-0000-0000-0000-000000000002',true,'Equipe conferiu a retirada dos itens');
+select public.online_record_refund(current_setting('test.order')::uuid,'c6000000-0000-0000-0000-000000000001',2500,'BANK-REFUND-FIXTURE-1','Devolução efetuada e conferida no banco');
+select public.online_record_refund(current_setting('test.order')::uuid,'c6000000-0000-0000-0000-000000000001',2500,'BANK-REFUND-FIXTURE-1','Devolução efetuada e conferida no banco');
+reset role;
+select pg_temp.assert((select paid_cents=1000 and total_cents=1000 from public.online_orders where id=current_setting('test.order')::uuid),'devolução idempotente reduz saldo recebido apenas uma vez');
+select pg_temp.assert((select stock=97 from public.ingredients where id='c2000000-0000-0000-0000-000000000001'),'remoção não devolve ingrediente preparado');
 -- Caixa precisa assumir e aceitar dinheiro, sem marcar como pago.
 set local role service_role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
@@ -88,6 +108,21 @@ select set_config('request.jwt.claims','{"sub":"c0000000-0000-0000-0000-00000000
 select public.online_collect_cash(current_setting('test.cash')::uuid,'c4000000-0000-0000-0000-000000000003',2000);
 select public.online_collect_cash(current_setting('test.cash')::uuid,'c4000000-0000-0000-0000-000000000003',2000);
 select pg_temp.assert((public.cash_summary(current_setting('test.shift')::uuid)->>'expected_cents')::int=1000,'troco não vira receita; retry não duplica caixa');
+set local role service_role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+select public.online_request_change(repeat('b',64),'c5000000-0000-0000-0000-000000000003','[{"product_id":"test-online-burger","quantity":2}]','Adicionar outro após pagar em dinheiro',2000);
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"c0000000-0000-0000-0000-000000000001","session_id":"online-test"}',true);
+select public.online_review_change('c5000000-0000-0000-0000-000000000003',true,'Cozinha consegue acrescentar este item');
+reset role;
+select pg_temp.assert((select status='payment_pending' and payment_method='pix' and paid_cents=1000 and total_cents=2000 from public.online_orders where id=current_setting('test.cash')::uuid),'adição após dinheiro recebido exige Pix complementar');
+set local role service_role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+select pg_temp.assert(public.online_ai_consent('5581777777777','Olá')='required','IA não exporta mensagens antes de opt-in');
+select pg_temp.assert(public.online_ai_consent('5581777777777','AUTORIZO IA')='granted','consentimento explícito de IA');
+select pg_temp.assert(public.online_ai_consent('5581777777777','SEM IA')='revoked','revogação de IA');
+select pg_temp.assert(public.online_ai_consent('5581777777777','Olá')='required','revogação persiste');
+select pg_temp.assert(exists(select 1 from jsonb_array_elements(public.online_claim_notifications()) n where n->>'topic'='change.accepted' and (n->'payment'->>'amount_cents')::int=1000),'fila prepara cobrança complementar canônica para WhatsApp');
 reset role;
 rollback;
 \o

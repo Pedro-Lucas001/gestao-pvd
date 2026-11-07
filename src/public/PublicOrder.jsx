@@ -4,5 +4,9 @@ import CustomerOrder from "./CustomerOrder";
 const LegacyOrder = lazy(() => import("./LegacyOrder"));
 export default function PublicOrder() {
   const route = useLocation();
-  return new URLSearchParams(route.search).has("token") ? <LegacyOrder /> : <CustomerOrder />;
+  return new URLSearchParams(route.search).has("token") ? (
+    <LegacyOrder />
+  ) : (
+    <CustomerOrder />
+  );
 }

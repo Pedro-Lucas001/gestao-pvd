@@ -78,7 +78,7 @@ declare job record;result jsonb:='[]';payment jsonb;
 begin
  update public.online_notifications n set delivered_at=now(),last_error='superseded' from public.online_orders o where o.id=n.order_id and n.revision<o.revision and n.delivered_at is null;
  for job in
-  with picked as(select n.id from public.online_notifications n join app_private.online_contacts c on c.order_id=n.order_id where n.delivered_at is null and n.attempts<8 and n.next_attempt_at<=now() and (n.lease_until is null or n.lease_until<now()) and c.whatsapp_consent order by n.next_attempt_at for update of n skip locked limit 10),claimed as(update public.online_notifications set lease_until=now()+interval '2 minutes',attempts=attempts+1 where id in(select id from picked) returning *)
+  with picked as(select n.id from public.online_notifications n join app_private.online_contacts c on c.order_id=n.order_id where n.delivered_at is null and n.attempts<8 and n.next_attempt_at<=now() and (n.lease_until is null or n.lease_until<now()) and c.whatsapp_consent order by n.next_attempt_at for update of n skip locked limit 2),claimed as(update public.online_notifications set lease_until=now()+interval '2 minutes',attempts=attempts+1 where id in(select id from picked) returning *)
   select n.*,o.number,o.status,o.payment_method,greatest(0,o.total_cents-o.paid_cents) due_cents,c.phone from claimed n join public.online_orders o on o.id=n.order_id join app_private.online_contacts c on c.order_id=n.order_id
  loop
   payment:=null;
@@ -135,4 +135,32 @@ begin
  if exists(select 1 from public.online_orders where shift_id=p_shift and status not in ('completed','cancelled') and total_cents>paid_cents) then raise exception 'pending_orders_in_shift';end if;
  perform public.close_shift(p_shift,p_counted_cents);
 end $$;
+create table app_private.online_ai_permissions(sender text primary key,granted_at timestamptz not null,expires_at timestamptz not null);
+create function public.online_ai_consent(p_sender text,p_message text) returns text language plpgsql security definer set search_path='' as $$
+declare m text:=upper(trim(p_message));
+begin
+ if m in ('SEM IA','REVOGO IA','NAO AUTORIZO','NÃO AUTORIZO','HUMANO','ATENDENTE') then delete from app_private.online_ai_permissions where sender=p_sender;return 'revoked';end if;
+ if m='AUTORIZO IA' then insert into app_private.online_ai_permissions values(p_sender,now(),now()+interval '30 days') on conflict(sender) do update set granted_at=excluded.granted_at,expires_at=excluded.expires_at;return 'granted';end if;
+ if exists(select 1 from app_private.online_ai_permissions where sender=p_sender and expires_at>now()) then return 'granted';end if;return 'required';
+end $$;
+revoke all on function public.online_ai_consent(text,text) from public,anon,authenticated;
+grant execute on function public.online_ai_consent(text,text) to service_role;
+-- Uma chamada de IA pode demorar: um atendimento por lease, em ordem,
+-- impede que a próxima mensagem do mesmo cliente corra em paralelo.
+create or replace function public.claim_message_replies() returns jsonb language plpgsql security definer set search_path='' as $$
+declare jobs jsonb;
+begin
+ perform pg_advisory_xact_lock(hashtextextended('online:ai-reply-claim',1));
+ with pending as(
+  select r.id from app_private.message_replies r join public.whatsapp_inbox i on i.id=r.inbox_id
+  where r.state in ('pending','retry','running') and r.attempts<8 and r.next_attempt_at<=now() and (r.lease_until is null or r.lease_until<now())
+  and not exists(select 1 from app_private.message_replies active join public.whatsapp_inbox other on other.id=active.inbox_id where active.id<>r.id and active.state='running' and active.lease_until>now() and other.sender=i.sender)
+  order by i.received_at for update of r skip locked limit 1
+ ),claimed as(update app_private.message_replies set state='running',lease_until=now()+interval '3 minutes',attempts=attempts+1 where id in(select id from pending) returning *)
+ select coalesce(jsonb_agg(jsonb_build_object('id',c.id,'sender',i.sender,'body',i.body,'received_at',i.received_at)),'[]') into jobs from claimed c join public.whatsapp_inbox i on i.id=c.inbox_id;
+ return jobs;
+end $$;
+-- RPCs de serviço usadas pelo fluxo legado também precisam de revogação
+-- explícita de PUBLIC; os grants de anon do checkout legado são preservados.
+revoke all on function public.confirm_provider_payment(uuid,int,text,text,text,text),public.confirm_provider_refund(uuid,text,int),public.prepare_checkout_payment(text,uuid),public.record_pix_artifact(uuid,text,timestamptz),public.ingest_whatsapp(text,text,text,timestamptz),public.claim_notifications(int),public.finish_notification(uuid,boolean,text),public.claim_message_replies(),public.finish_message_reply(uuid,boolean),public.authenticate_staff_pin(text,text),public.bind_fastpass_session(uuid,text,text) from public,anon,authenticated;
 commit;

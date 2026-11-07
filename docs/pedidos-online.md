@@ -48,6 +48,7 @@ Quando uma compra já paga ganha valor, a revisão aprovada aguarda um Pix compl
 | `WHATSAPP_ONLINE_PAYMENT_TEMPLATE` | Modelo aprovado com parâmetros: número do pedido, valor, código Pix copia e cola |
 | `WHATSAPP_TEMPLATE_LANGUAGE` | Idioma aprovado, padrão `pt_BR` |
 | `INTEGRATION_WORKER_SECRET` | Segredo aleatório do worker/agendador, já utilizado na integração anterior |
+| `AI_CUSTOMER_EXPORT_ENABLED` | Deve ser exatamente `true` após a loja aprovar o processamento externo; por padrão não exporta mensagens |
 | `OPENAI_API_KEY` | Chave privada para atendimento com IA |
 | `OPENAI_SALES_MODEL` | Modelo compatível com Responses e Structured Outputs, padrão `gpt-4.1-mini` |
 | `AI_DAILY_REQUEST_LIMIT` | Teto compartilhado de chamadas de IA por janela de 24 horas, padrão 200 e máximo 1000 |
@@ -75,7 +76,7 @@ As notificações entram em uma fila com tentativas, lease e backoff, até oito 
 
 ### Atendimento com IA
 
-O assistente usa o mesmo catálogo do site. Interpreta escolhas e devolve uma proposta de carrinho com IDs, quantidades e modificadores validados no servidor. No site o cliente aplica a sugestão; no WhatsApp recebe um link para revisar e confirmar a compra no site. A finalização não ocorre exclusivamente na conversa. A IA não altera pedidos, aceita alterações, decide devoluções ou confirma pagamentos. Só as funções de negócio executam essas operações.
+O assistente usa o mesmo catálogo do site. O envio à OpenAI exige o opt-in do cliente e `AI_CUSTOMER_EXPORT_ENABLED=true`: no chat há uma autorização explícita; no WhatsApp a primeira resposta explica o processamento e pede AUTORIZO IA. A autorização do WhatsApp expira em 30 dias e pode ser revogada com SEM IA. Antes disso, não se exporta conteúdo de mensagens à IA. Interpreta escolhas e devolve uma proposta de carrinho com IDs, quantidades e modificadores validados no servidor. No site o cliente aplica a sugestão; no WhatsApp recebe um link para revisar e confirmar a compra no site. A finalização não ocorre exclusivamente na conversa. A IA não altera pedidos, aceita alterações, decide devoluções ou confirma pagamentos. Só as funções de negócio executam essas operações.
 
 As respostas finais são montadas pelo servidor, com preço canônico. Não há respostas livres do modelo afirmando que uma compra foi paga. Somente catálogo e mensagens recentes do atendimento são enviados à OpenAI; números de telefone e e-mails são removidos automaticamente do texto, mas isso não substitui uma política de privacidade nem remove todos os dados pessoais possíveis. Não envie documentos, endereços, senhas ou dados de cartão ao chat. `store=false` é usado na Responses API; configure retenção/contrato conforme a conta da loja. Sem chave, em erro, em alergias/reclamações ou ao pedir HUMANO, há encaminhamento à equipe. O atendimento humano atribuído pausa a automação no WhatsApp, e o pedido de HUMANO a pausa por 24 horas. Admin pode retomar pela função `online_resume_automation` com justificativa.
 
