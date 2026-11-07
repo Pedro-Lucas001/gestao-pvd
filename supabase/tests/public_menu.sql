@@ -2,6 +2,7 @@
 begin;
 create function pg_temp.assert(ok boolean, message text) returns void language plpgsql as $$
 begin if ok is not true then raise exception 'ASSERTION FAILED: %', message; end if; end $$;
+grant execute on function pg_temp.assert(boolean,text) to anon,authenticated,service_role;
 select set_config('app.audit_reason','Teste isolado de publicação do cardápio',true);
 insert into public.products(id,name,category,description,price_cents,sector,image_path,active)
 values ('menu-test-public','Produto público','bebidas','Descrição pública',1200,'bar','/menu/bebidas.svg',true),
