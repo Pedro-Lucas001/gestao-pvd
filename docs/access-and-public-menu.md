@@ -12,11 +12,11 @@
 | `/estoque`, `/catalogo`, `/pagamentos` | Estoque, preços e conciliação | Administrador |
 | `/equipe`, `/auditoria`, `/links`, `/integracoes` | Gestão de acessos e serviços | Administrador |
 
-`/previa` redireciona ao cardápio. O cliente não recebe controles de caixa nem PDV de demonstração. `/pedido` continua sendo o checkout por link específico já existente, separado do mostruário. Não há compra nem coleta de dados pessoais no cardápio.
+`/previa` redireciona ao cardápio. O cliente não recebe controles de caixa nem PDV de demonstração. `/pedido` oferece a compra online com as migrações 016–017; links antigos com `?token=...` mantêm o checkout anterior. O mostruário não exige cadastro; dados de contato e consentimento são solicitados ao finalizar o pedido.
 
 ## Autenticação e autorização
 
-O login não compara PINs fixos no navegador. E-mail e senha usam Supabase Auth; o PIN do funcionário é validado pela função `fast-pass`, com terminal cadastrado, limite de tentativas e perfil ativo. O administrador entra com e-mail e senha. Seu PIN serve para retomar o terminal e não para obter privilégios administrativos em um login de funcionário.
+O login não compara PINs fixos no navegador. E-mail e senha usam Supabase Auth; o PIN do funcionário é validado pela função `fast-pass`, com terminal cadastrado, limite de tentativas e perfil ativo. O administrador entra com e-mail e senha. Após o bloqueio por inatividade, o administrador confirma sua senha; o PIN continua exclusivo dos funcionários e não concede privilégios administrativos.
 
 `src/auth/modules.js` governa os menus e as rotas. Perfis ausentes, desconhecidos ou não ativos não recebem acesso. No servidor, RLS e RPCs continuam verificando a função do operador e isolando caixas, setores e dados financeiros; esconder links não substitui essas verificações.
 
@@ -44,3 +44,5 @@ Com o backend configurado, uma falha de consulta exibe erro e opção de tentar 
 
 - [OWASP — Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html): menor privilégio, negação por padrão e validação por requisição.
 - [Supabase — Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security): políticas no banco para acesso anônimo e autenticado.
+
+Para a instalação atual completa, seguir [activation.md](activation.md) até a migração **018**, incluindo pedidos online, integrações e controle administrativo. A seção 015 acima descreve apenas a RPC de catálogo.
