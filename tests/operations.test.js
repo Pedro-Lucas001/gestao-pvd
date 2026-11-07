@@ -15,7 +15,7 @@ import { filterMenu, publicProducts } from "../src/public/menuData.js";
 test("every internal module follows the same least-privilege role matrix", () => {
   const expected = {
     admin: accessModules.map((m) => m.path),
-    cashier: ["/pdv", "/atendimento"],
+    cashier: ["/pedidos-online", "/pdv", "/atendimento"],
     kitchen: ["/cozinha"],
   };
   for (const role of [
@@ -305,4 +305,14 @@ test("an empty station never promises less than one item's preparation average",
     estimateOrderPreparation([station], [{ sector: "grill", quantity: 1 }]),
     3,
   );
+});
+
+test("customer cart strips client prices and preserves line customizations", async () => {
+  const { cartPayload, draftLine, patchCart, trackingToken } = await import("../src/public/cart.js");
+  const item = { ...draftLine({ id: "burger", name: "Burger", price_cents: 1 }), modifiers: ["Sem cebola"], notes: "Bem quente" };
+  assert.deepEqual(cartPayload([item]), [{ product_id: "burger", quantity: 1, modifiers: ["Sem cebola"], notes: "Bem quente" }]);
+  assert.equal(patchCart([item], item.line_id, { quantity: 0 }).length, 0);
+  assert.equal(patchCart([item], item.line_id, { quantity: 100 })[0].quantity, 100);
+  assert.match(trackingToken(), /^[a-f0-9]{64}$/);
+  assert.notEqual(trackingToken(), trackingToken());
 });

@@ -79,6 +79,9 @@ export class MetaClient {
   text(to: string, body: string) {
     return this.send(to, { type: "text", text: { preview_url: false, body } });
   }
+  template(to: string, name: string, language: string, parameters: string[]) {
+    return this.send(to, { type: "template", template: { name, language: { code: language }, components: [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }] } });
+  }
   status(
     to: string,
     template: string,

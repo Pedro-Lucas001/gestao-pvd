@@ -1,7 +1,7 @@
 export const categories = [
   ["all", "Todos"],
   ["hamburgueres", "Hambúrgueres"],
-  ["dogoes", "Dogões"],
+  ["dogoes", "Dogs na chapa"],
   ["combos", "Combos"],
   ["porcoes", "Porções"],
   ["pasteis", "Pastéis"],

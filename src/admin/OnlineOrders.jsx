@@ -1,0 +1,516 @@
+import { useEffect, useState } from "react";
+import { rpc } from "../lib/supabase";
+import { command } from "./commands";
+import { useAuth } from "../auth/context";
+import { cents, money } from "../lib/operations";
+import "./OnlineOrders.css";
+const labels = {
+  payment_pending: "Pagamento pendente",
+  awaiting_store: "Aguardando aceite da loja",
+  accepted: "Na fila",
+  preparing: "Em preparo",
+  ready: "Pronto",
+  dispatched: "Saiu para entrega",
+  completed: "Concluído",
+  cancelled: "Cancelado",
+};
+function Settings({ refresh }) {
+  const [settings, setSettings] = useState(null),
+    [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    rpc("online_shop_config")
+      .then((s) => {
+        if (alive) setSettings(s);
+      })
+      .catch((e) => {
+        if (alive) setError(e.message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  async function save(e) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    setError("");
+    try {
+      const payload = {
+        enabled: form.has("enabled"),
+        delivery_enabled: form.has("delivery"),
+        cash_enabled: form.has("cash"),
+        delivery_fee_cents: cents(form.get("fee")),
+        whatsapp_number: String(form.get("whatsapp")).replace(/\D/g, ""),
+      };
+      await rpc("online_save_settings", {
+        p_settings: payload,
+        p_reason: form.get("reason"),
+      });
+      setSettings(payload);
+      refresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  return (
+    <details className="online-settings">
+      <summary>Configurar pedidos, entrega e contato da loja</summary>
+      <p>
+        Taxa única de entrega. Ative apenas quando a equipe puder atender os
+        endereços recebidos. Cadastre Pix, Mercado Pago, Meta e OpenAI como
+        segredos das funções, fora do navegador.
+      </p>
+      {settings && (
+        <form onSubmit={save} key={JSON.stringify(settings)}>
+          <div className="online-settings-grid">
+            <div>
+              <label className="online-check">
+                <input
+                  type="checkbox"
+                  name="enabled"
+                  defaultChecked={settings.enabled}
+                />
+                Aceitar pedidos online
+              </label>
+              <label className="online-check">
+                <input
+                  type="checkbox"
+                  name="delivery"
+                  defaultChecked={settings.delivery_enabled}
+                />
+                Habilitar entrega
+              </label>
+              <label className="online-check">
+                <input
+                  type="checkbox"
+                  name="cash"
+                  defaultChecked={settings.cash_enabled}
+                />
+                Aceitar dinheiro
+              </label>
+            </div>
+            <div>
+              <label>
+                Taxa fixa de entrega (R$)
+                <input
+                  name="fee"
+                  required
+                  inputMode="decimal"
+                  defaultValue={(settings.delivery_fee_cents / 100).toFixed(2)}
+                />
+              </label>
+              <label>
+                WhatsApp da loja com país e DDD
+                <input
+                  name="whatsapp"
+                  placeholder="5581999999999"
+                  defaultValue={settings.whatsapp_number}
+                />
+              </label>
+            </div>
+          </div>
+          <label>
+            Justificativa
+            <input required minLength={5} maxLength={500} name="reason" />
+          </label>
+          <button className="primary">Salvar configurações</button>
+        </form>
+      )}
+      {error && (
+        <p className="online-error" role="alert">
+          {error}
+        </p>
+      )}
+    </details>
+  );
+}
+function Order({ order: o, admin, user, run, busy }) {
+  const [tender, setTender] = useState(""),
+    [bank, setBank] = useState(""),
+    [reason, setReason] = useState(""),
+    [ack, setAck] = useState(false);
+  const mine = o.assigned_to === user || (admin && o.assigned_to);
+  const pendingPix = o.payments.find(
+    (p) => p.status === "pending" && p.provider === "manual_pix",
+  );
+  return (
+    <article className="online-card">
+      <h3>
+        Online #{o.number} · {labels[o.status]}
+      </h3>
+      <p>
+        {new Date(o.created_at).toLocaleString("pt-BR")} ·{" "}
+        {o.fulfillment === "delivery" ? "Entrega" : "Retirada"}
+      </p>
+      <ul className="online-lines">
+        {o.items.map((i, n) => (
+          <li key={n}>
+            <strong>
+              {i.quantity}× {i.name}
+            </strong>
+            <p>
+              {i.modifiers.join(" · ")} {i.notes}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <p>
+        Total: <strong>{money(o.total_cents)}</strong> · Recebido:{" "}
+        {money(o.paid_cents)}
+        <br />
+        Pendente: <strong>{money(o.due_cents)}</strong> ·{" "}
+        {o.payment_method === "cash"
+          ? "Dinheiro"
+          : o.payment_method === "card"
+            ? "Cartão online"
+            : "Pix"}
+      </p>
+      {o.cash_change_for_cents && (
+        <p className="online-notice">
+          Troco solicitado para {money(o.cash_change_for_cents)}.{" "}
+          {o.cash_change_for_cents >= o.due_cents
+            ? `Troco previsto: ${money(o.cash_change_for_cents - o.due_cents)}.`
+            : "O total mudou: confirme um novo valor com o cliente."}
+        </p>
+      )}
+      {o.contact ? (
+        <address>
+          <strong>{o.contact.name}</strong>
+          <br />
+          <a
+            href={`https://wa.me/${o.contact.phone}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {o.contact.phone}
+          </a>
+          <br />
+          {o.contact.address}
+        </address>
+      ) : (
+        <p>
+          Assuma o atendimento com seu turno aberto para consultar o contato.
+        </p>
+      )}
+      {!o.assigned_to && (
+        <button
+          className="primary"
+          disabled={busy}
+          onClick={() => run("online_claim_order", { p_order: o.id })}
+        >
+          Assumir atendimento no meu turno
+        </button>
+      )}
+      {mine && o.status === "awaiting_store" && (
+        <button
+          className="primary"
+          disabled={busy}
+          onClick={() =>
+            run("online_accept_cash", {
+              p_order: o.id,
+              p_reason:
+                "Loja confirmou o pedido e o recebimento futuro em dinheiro",
+            })
+          }
+        >
+          Aceitar preparo com dinheiro a receber
+        </button>
+      )}
+      {mine &&
+        o.payment_method === "cash" &&
+        o.cash_authorized &&
+        o.due_cents > 0 && (
+          <details>
+            <summary>Registrar dinheiro efetivamente recebido</summary>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                try {
+                  run(
+                    "online_collect_cash",
+                    { p_order: o.id, p_tendered: cents(tender) },
+                    true,
+                  );
+                } catch {
+                  setReason("Informe o valor recebido no formato 100,00.");
+                }
+              }}
+            >
+              <label>
+                Valor recebido em mãos (R$)
+                <input
+                  required
+                  inputMode="decimal"
+                  value={tender}
+                  onChange={(e) => setTender(e.target.value)}
+                />
+              </label>
+              <label className="online-check">
+                <input
+                  type="checkbox"
+                  required
+                  checked={ack}
+                  onChange={(e) => setAck(e.target.checked)}
+                />
+                Conferi o dinheiro recebido e o troco entregue.
+              </label>
+              {reason.startsWith("Informe o valor") && (
+                <p role="alert">{reason}</p>
+              )}
+              <button className="primary" disabled={busy || !ack}>
+                Registrar recebimento físico
+              </button>
+            </form>
+          </details>
+        )}
+      {mine && ["ready", "dispatched"].includes(o.status) && (
+        <div className="online-actions">
+          {o.status === "ready" && o.fulfillment === "delivery" && (
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() =>
+                run("online_fulfill", { p_order: o.id, p_next: "dispatched" })
+              }
+            >
+              Saiu para entrega
+            </button>
+          )}
+          <button
+            className="primary"
+            disabled={busy || o.due_cents > 0}
+            onClick={() =>
+              run("online_fulfill", { p_order: o.id, p_next: "completed" })
+            }
+          >
+            Concluir após entrega/retirada
+          </button>
+        </div>
+      )}
+      {admin && pendingPix && (
+        <details>
+          <summary>Conciliar Pix manual pelo extrato</summary>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              run("online_confirm_manual_pix", {
+                p_payment: pendingPix.id,
+                p_reference: bank,
+                p_reason: reason,
+              });
+            }}
+          >
+            <p>
+              Confirme no extrato da conta da loja o crédito de{" "}
+              {money(pendingPix.amount_cents)}. Captura de tela do cliente não
+              comprova recebimento.
+            </p>
+            <label>
+              Identificador bancário do crédito
+              <input
+                required
+                minLength={8}
+                maxLength={100}
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
+              />
+            </label>
+            <label>
+              Justificativa da conferência
+              <input
+                required
+                minLength={5}
+                maxLength={500}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+            <button className="primary" disabled={busy}>
+              Confirmar crédito conferido
+            </button>
+          </form>
+        </details>
+      )}
+      {admin && o.refund_due_cents > 0 && (
+        <details>
+          <summary>Devolução pendente: {money(o.refund_due_cents)}</summary>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(
+                "online_record_refund",
+                {
+                  p_order: o.id,
+                  p_amount: o.refund_due_cents,
+                  p_reference: bank,
+                  p_reason: reason,
+                },
+                true,
+              );
+            }}
+          >
+            <p>
+              Faça a devolução pelo banco e só então registre aqui. Este botão
+              não transfere dinheiro.
+            </p>
+            <label>
+              Identificador bancário da devolução
+              <input
+                required
+                minLength={8}
+                maxLength={100}
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
+              />
+            </label>
+            <label>
+              Justificativa
+              <input
+                required
+                minLength={5}
+                maxLength={500}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+            <button className="primary" disabled={busy}>
+              Registrar devolução conferida
+            </button>
+          </form>
+        </details>
+      )}
+    </article>
+  );
+}
+export default function OnlineOrders() {
+  const { profile } = useAuth(),
+    admin = profile.role === "admin";
+  const [orders, setOrders] = useState([]),
+    [metrics, setMetrics] = useState(null),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [version, setVersion] = useState(0),
+    [filter, setFilter] = useState("active");
+  const refresh = () => setVersion((v) => v + 1);
+  useEffect(() => {
+    let alive = true,
+      running = false;
+    async function load() {
+      if (running) return;
+      running = true;
+      try {
+        const results = await Promise.all([
+          rpc("online_operations_queue"),
+          admin ? rpc("online_admin_metrics") : null,
+        ]);
+        if (alive) {
+          setOrders(results[0]);
+          setMetrics(results[1]);
+        }
+      } catch (e) {
+        if (alive) setError(e.message);
+      } finally {
+        running = false;
+      }
+    }
+    const t = setTimeout(load, 0),
+      i = setInterval(load, 10000);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+      clearInterval(i);
+    };
+  }, [version, admin]);
+  async function run(name, args, keyed = false) {
+    setBusy(true);
+    setError("");
+    try {
+      await (keyed ? command(name, args) : rpc(name, args));
+      refresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const visible = orders.filter(
+    (o) => filter === "all" || !["completed", "cancelled"].includes(o.status),
+  );
+  return (
+    <section>
+      <div className="online-heading">
+        <div>
+          <span className="eyebrow">ATENDIMENTO DO SITE</span>
+          <h1>Pedidos online</h1>
+          <p>
+            Assuma o pedido, confira pagamentos e acompanhe retirada ou entrega.
+            Abra seu turno na frente de caixa antes de assumir ou receber
+            dinheiro.
+          </p>
+        </div>
+        <button className="secondary" onClick={refresh}>
+          Atualizar
+        </button>
+      </div>
+      {admin && <Settings refresh={refresh} />}
+      {metrics && (
+        <>
+          <div className="online-metrics">
+            {[
+              ["Recebido online", metrics.received_cents],
+              ["Devoluções registradas", metrics.refunded_cents],
+              ["A receber", metrics.receivable_cents],
+              ["A devolver", metrics.refund_due_cents],
+            ].map(([label, value]) => (
+              <span key={label}>
+                {label}
+                <strong>{money(value)}</strong>
+              </span>
+            ))}
+          </div>
+          <p>
+            Indicadores exclusivos dos pedidos online. O resumo do turno inclui
+            dinheiro online recebido; os relatórios antigos de vendas do balcão
+            continuam separados.
+          </p>
+        </>
+      )}
+      {error && (
+        <p role="alert" className="online-error">
+          {error}
+        </p>
+      )}
+      <div className="online-filters">
+        <button
+          className="secondary"
+          aria-pressed={filter === "active"}
+          onClick={() => setFilter("active")}
+        >
+          Em andamento
+        </button>
+        <button
+          className="secondary"
+          aria-pressed={filter === "all"}
+          onClick={() => setFilter("all")}
+        >
+          Últimos 7 dias
+        </button>
+      </div>
+      <div className="online-grid">
+        {visible.map((o) => (
+          <Order
+            key={o.id}
+            order={o}
+            admin={admin}
+            user={profile.id}
+            run={run}
+            busy={busy}
+          />
+        ))}
+      </div>
+      {!visible.length && (
+        <p className="online-empty">Nenhum pedido para este filtro.</p>
+      )}
+    </section>
+  );
+}

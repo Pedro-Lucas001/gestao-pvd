@@ -38,6 +38,7 @@ import Brand from "./components/Brand";
 import { homeForRole } from "./auth/permissions";
 import { accessModules } from "./auth/modules";
 import "./App.css";
+const OnlineOrders = lazy(() => import("./admin/OnlineOrders"));
 const DRE = lazy(() => import("./admin/DRE"));
 const Reports = lazy(() => import("./admin/Reports"));
 const Inventory = lazy(() => import("./admin/Inventory"));
@@ -273,6 +274,7 @@ function Denied() {
 }
 function AdminModule({ kind }) {
   const views = {
+    "pedidos-online": OnlineOrders,
     dashboard: Reports,
     relatorios: Reports,
     dre: DRE,

@@ -1,5 +1,14 @@
 project_id = "planeta-lanches"
 
+[functions.customer-api]
+verify_jwt = false
+
+[functions.customer-assistant]
+verify_jwt = false
+
+[functions.online-payment-webhook]
+verify_jwt = false
+
 [api]
 enabled = true
 port = 54321
