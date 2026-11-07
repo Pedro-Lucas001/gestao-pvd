@@ -692,6 +692,7 @@ export default function CustomerOrder() {
       setError(e.message);
       setKnownRejected(
         [
+          "payment_unavailable",
           "price_changed_review_order",
           "invalid_change_amount",
           "delivery_contact_required",

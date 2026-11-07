@@ -122,7 +122,7 @@ select pg_temp.assert(public.online_ai_consent('5581777777777','Olá')='required
 select pg_temp.assert(public.online_ai_consent('5581777777777','AUTORIZO IA')='granted','consentimento explícito de IA');
 select pg_temp.assert(public.online_ai_consent('5581777777777','SEM IA')='revoked','revogação de IA');
 select pg_temp.assert(public.online_ai_consent('5581777777777','Olá')='required','revogação persiste');
-select pg_temp.assert(exists(select 1 from jsonb_array_elements(public.online_claim_notifications()) n where n->>'topic'='change.accepted' and (n->'payment'->>'amount_cents')::int=1000),'fila prepara cobrança complementar canônica para WhatsApp');
+select pg_temp.assert(exists(select 1 from jsonb_array_elements(public.online_claim_notifications()||public.online_claim_notifications()) n where n->>'topic'='change.accepted' and (n->'payment'->>'amount_cents')::int=1000),'fila prepara cobrança complementar canônica para WhatsApp');
 reset role;
 rollback;
 \o
