@@ -47,3 +47,16 @@ npm run activation:check
 Esses dois comandos apenas escrevem/conferem um arquivo local. Não conectam a
 nenhum banco, não criam usuários e não publicam funções. Nunca executar
 `supabase/tests/bootstrap.sql` no projeto hospedado.
+
+## Permissões de RPC
+
+`04_restringir_rpc.sql` remove o EXECUTE global de PUBLIC nas funções atuais
+e nas futuras funções criadas pelo dono das migrações. Um REVOKE com
+`ALTER DEFAULT PRIVILEGES IN SCHEMA` não remove a permissão global padrão.
+Os GRANTs explícitos para consultas/checkout públicos, operadores autenticados
+e serviço são preservados. O teste `supabase/tests/rpc_privileges.sql` verifica
+os cinco endpoints públicos permitidos, a continuidade dos acessos internos e
+a ausência de execução pública em uma função criada posteriormente.
+
+Os instaladores gerados incluem esse ajuste. Em banco já instalado até 018,
+aplicar somente 04; não repetir a instalação ou a transição do legado.

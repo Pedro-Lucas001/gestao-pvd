@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = new URL("../", import.meta.url);
 const migrationDir = new URL("supabase/migrations/", root);
 const migrations = (await readdir(migrationDir)).filter((name) => name.endsWith(".sql")).sort();
-const sourcePaths = [...migrations.map((name) => `supabase/migrations/${name}`), "supabase/seed.sql"];
+const sourcePaths = [...migrations.map((name) => `supabase/migrations/${name}`), "supabase/seed.sql", "supabase/activation/04_restringir_rpc.sql"];
 const blocks = [];
 for (const path of sourcePaths) {
   const source = await readFile(new URL(path, root), "utf8");

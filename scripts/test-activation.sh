@@ -32,7 +32,7 @@ psql_local < supabase/activation/00_diagnostico.sql
 # Explicitly open the disposable test shop for the existing order suites.
 psql_local -c "update public.online_shop_settings set enabled=true,delivery_enabled=true"
 # Exercise the installed contract, not just the presence of generated SQL text.
-for sql in supabase/tests/rls.sql supabase/tests/advanced.sql supabase/tests/tactical.sql supabase/tests/public_menu.sql supabase/tests/online.sql supabase/tests/admin_control.sql; do
+for sql in supabase/tests/rls.sql supabase/tests/advanced.sql supabase/tests/tactical.sql supabase/tests/public_menu.sql supabase/tests/online.sql supabase/tests/admin_control.sql supabase/tests/rpc_privileges.sql; do
   psql_local < "$sql"
 done
 
@@ -76,7 +76,7 @@ do $$begin
 end $$;
 SQL
 psql_legacy -c 'update public.online_shop_settings set enabled=true,delivery_enabled=true'
-for sql in supabase/tests/public_menu.sql supabase/tests/online.sql supabase/tests/admin_control.sql; do
+for sql in supabase/tests/public_menu.sql supabase/tests/online.sql supabase/tests/admin_control.sql supabase/tests/rpc_privileges.sql; do
   psql_legacy < "$sql"
 done
 echo 'Activation, repeat refusal, legacy preservation/refusal and operational SQL suites passed.'
