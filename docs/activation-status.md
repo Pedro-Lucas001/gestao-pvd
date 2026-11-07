@@ -1,69 +1,39 @@
-# Situação da ativação — 07/11/2026
+# Ativação — situação em 07/11/2026
 
-Projeto Supabase confirmado: **Planeta-Lanches** (`qhtcyqsmjuwlhsrzjhqp`).
-Projeto Vercel: **gestao-pvd**. Domínio de produção: `https://gestao-pvd.vercel.app`.
+Projeto Supabase: **Planeta-Lanches** (`qhtcyqsmjuwlhsrzjhqp`). Site: https://gestao-pvd.vercel.app/cardapio.
 
-## Conferido diretamente
+## Concluído
 
-- O banco possui oito tabelas antigas, todas com contagem exata de zero registros:
-  profiles, ingredients, products, technical_sheets, orders, order_items,
-  audit_logs e customers. Não há usuários Auth, buckets nem Edge Functions.
-- É um terceiro contrato, com `profiles.full_name`, `pin_code` e `products.price`;
-  os indicadores antigos de `name`/`nome` não o identificavam.
-- O frontend atual espera 001–018, ausentes nesse projeto. O instalador de banco
-  vazio recusa corretamente essa situação.
-- A Vercel tem uma publicação READY da main anterior e nenhuma variável de
-  ambiente de projeto cadastrada na consulta realizada.
+- Transição autorizada aplicada: oito tabelas antigas preservadas no schema privado `planeta_legacy_20261107`, com suas funções e dependências.
+- Contrato 001–018 instalado e catálogo inicial com **47 produtos**. A API pública foi consultada via HTTPS com a chave publishable e retornou HTTP 200 e os 47 registros.
+- Bucket `planeta-product-images` criado. Todas as tabelas públicas possuem RLS.
+- Ajuste adicional de permissões aplicado: EXECUTE implícito de PUBLIC removido; ficam disponíveis sem login somente `public_menu`, `online_shop_config`, `checkout_menu`, `checkout_order` e `checkout_status`. Os GRANTs de operadores e serviço foram preservados e conferidos.
+- **11 Edge Functions publicadas**, seguindo os `verify_jwt` do config.toml. Funções `eco-*` não foram publicadas.
+- Variáveis públicas de produção configuradas na Vercel, sem credenciais privilegiadas no frontend. PRs 11 e 12 mesclados; publicação de produção READY.
+- CI aprovado, incluindo testes de banco/RLS, recusa de instalação repetida, preservação/recusa de legado com dados, permissões de RPC e funções Deno. Navegador local com Auth/REST simulados validou o bloqueio por senha/PIN. A tentativa de navegador contra produção encontrou limitação de certificado do proxy deste ambiente; a verificação de produção utilizou HTTPS verificado e os metadados da Vercel.
 
-## Preparado e testado
+## Operação ainda pausada
 
-PR de correções: https://github.com/Pedro-Lucas001/gestao-pvd/pull/11
+Pedidos e entrega permanecem desabilitados. Não há contas Auth nem administrador ativo na última conferência. A publicação das funções não configura automaticamente seus segredos.
 
-- Deno separado de Vite/PWA/Rollup, runtime fixado e dependências com lockfile.
-- Admin retoma o bloqueio com senha; senha incorreta mantém o bloqueio.
-- Formulário único de criação da equipe e informações de integrações atualizadas.
-- Instaladores gerados das fontes, sem fixtures nem criação automática de admin.
-- Transição específica preservando tabelas/funções antigas em schema privado,
-  recusando qualquer registro/conta/bucket ou estrutura diferente.
-- Lint, 17 testes Node, build, testes SQL operacionais e testes Deno aprovados.
-  Teste de navegador aprovado com Auth/REST simulados, incluindo senha incorreta,
-  retomada do admin, equipe, caixa, offline, retry e isolamento de rotas.
+Próximos passos pelo responsável no painel Supabase:
 
-## Ainda não aplicado
-
-A revisão automática rejeitou a aplicação remota por exigir autorização explícita
-para a migração específica que move objetos legados e instala o contrato atual.
-Uma consulta posterior confirmou as oito tabelas originais, nenhum schema de
-arquivo criado e `public_menu()` ainda ausente.
-
-SQL concreto para revisão: [03_transicao_legado_vazio.sql](../supabase/activation/03_transicao_legado_vazio.sql).
-Ele preserva objetos, não apaga registros e deixa pedidos e entrega pausados.
-Ainda assim, muda nomes de acesso da estrutura anterior e não deve ser aplicado
-se houver outra aplicação utilizando aqueles objetos.
-
-Depois da autorização: aplicar a transição, conferir catálogo/RLS, configurar
-as variáveis públicas de produção na Vercel, publicar as funções corretas e
-publicar o frontend. Não apontar previews automaticamente para o banco da loja.
-
-## Ações que dependem da conta da loja
-
-Criar a primeira conta pelo painel Auth com senha escolhida pelo responsável,
-ativar o UUID correto e cadastrar os terminais. As ferramentas conectadas não
-oferecem criação de contas Auth nem cadastro de segredos das Edge Functions.
-
-Configuração base no painel de segredos das funções:
+1. Em **Authentication → Users**, criar a conta individual do administrador com e-mail confirmado e senha escolhida pelo responsável. Não compartilhar a senha no chat. Ativar somente o UUID correto conforme [activation.md](activation.md).
+2. Nas configurações de Auth, desabilitar cadastro público: a consulta de `/auth/v1/settings` ainda retornou `disable_signup=false`. O site não oferece cadastro de funcionários ao público, e contas sem perfil ativo não recebem acesso operacional.
+3. Em **Edge Functions → Secrets**, cadastrar os valores públicos de configuração do servidor:
 
 ```dotenv
 APP_ALLOWED_ORIGINS=https://gestao-pvd.vercel.app
 PUBLIC_SITE_URL=https://gestao-pvd.vercel.app
 ```
 
-Configurar também segredos próprios de rate limit/worker e, para cada serviço
-escolhido, as credenciais de Pix/Mercado Pago, Meta e OpenAI. Valores privados
-somente nos painéis seguros; nunca no chat ou em VITE_*. O exemplo completo está
-em [supabase/.env.example](../supabase/.env.example).
+A consulta OPTIONS de `customer-api` ainda retornou 403 sem essa origem cadastrada. O cardápio consulta diretamente a RPC pública e funciona independentemente dessas funções.
 
-Pix manual exige conferência do crédito; cartão online exige homologação do
-provedor. WhatsApp exige número/token/templates e agendamento. IA exige chave,
-limites e consentimento. Nenhum serviço externo pago foi ativado, nenhum valor
-foi cobrado e nenhuma mensagem foi enviada nesta preparação.
+4. Cadastrar os terminais e os funcionários com PIN individual; revisar preços, fotos, estoque, custos, fichas e entrega antes de liberar pedidos.
+5. Para Pix/cartão, WhatsApp e IA, cadastrar as credenciais da loja, homologar os provedores e configurar o agendamento autenticado do worker. O exemplo está em [supabase/.env.example](../supabase/.env.example). Nenhum pagamento ou mensagem foi enviado na ativação.
+
+## Histórico e manutenção
+
+O histórico remoto registra `initialize_current_contract_preserving_empty_legacy` e `restrict_implicit_public_rpc_execution`. O primeiro representa o bundle integral instalado, e não 18 entradas individuais da CLI. Reconciliar esse histórico antes de usar `db push`; não repetir instaladores, marcar arquivos sem conferência nem executar `db reset`.
+
+Os avisos restantes sobre funções SECURITY DEFINER devem ser avaliados conforme os grants explícitos e as validações de cargo/capacidade. As cinco funções públicas acima são intencionais; não remover esses acessos para apenas zerar avisos do painel.
