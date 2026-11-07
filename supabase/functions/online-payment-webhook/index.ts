@@ -1,3 +1,4 @@
+import { kickWorker } from "../_shared/kick_worker.ts";
 import { readLimited, response } from "../_shared/http.ts";
 import { onlineRpc, sha256 } from "../_shared/online.ts";
 import { amountInCents, verifiedMercadoPayment, verifyMercadoSignature } from "../_shared/online_payments.ts";
@@ -13,6 +14,7 @@ Deno.serve(async (req: Request) => {
     if (typeof payment.external_reference !== "string" || !/^[a-f0-9-]{36}$/i.test(payment.external_reference)) throw new Error("INVALID_REFERENCE");
     const event = `${id}:${payment.status}:${payment.date_last_updated}`;
     await onlineRpc("online_confirm_payment", { p_payment: payment.external_reference, p_amount: amountInCents(payment.transaction_amount), p_reference: `mp:${id}`, p_provider: "mercadopago", p_event: event, p_hash: await sha256(event) });
+    kickWorker();
     return response({ ok: true });
   } catch {
     return response({ error: "PAYMENT_UNVERIFIED_OR_CONFLICTING_RECONCILE" }, 409);

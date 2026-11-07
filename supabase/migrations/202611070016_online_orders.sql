@@ -226,8 +226,8 @@ begin
  update public.online_changes set status='accepted',review_reason=trim(p_reason),reviewed_by=auth.uid(),reviewed_at=now() where id=c.id;
  update public.online_orders set items=c.items,subtotal_cents=c.subtotal_cents,total_cents=c.total_cents,revision=revision+1,updated_at=now(),
  payment_method=case when paid_cents>0 and c.total_cents>paid_cents then 'pix' else payment_method end,
- status=case when c.total_cents>paid_cents and not(payment_method='cash' and cash_authorized) then 'payment_pending' else 'accepted' end where id=o.id;
- if c.total_cents<=o.paid_cents or (o.payment_method='cash' and o.cash_authorized) then perform app_private.online_release(o.id);end if;
+ status=case when c.total_cents>paid_cents and not(payment_method='cash' and cash_authorized and paid_cents=0) then 'payment_pending' else 'accepted' end where id=o.id;
+ if c.total_cents<=o.paid_cents or (o.payment_method='cash' and o.cash_authorized and o.paid_cents=0) then perform app_private.online_release(o.id);end if;
  insert into public.online_notifications(order_id,topic,revision) values(o.id,'change.accepted',o.revision+1) on conflict do nothing;
  perform app_private.reason(p_reason);perform app_private.log('online.change_accepted','online_order',o.id::text,c.total_cents-o.total_cents);
 end $$;

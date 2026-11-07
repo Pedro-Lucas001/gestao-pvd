@@ -1,3 +1,4 @@
+import { kickWorker } from "../_shared/kick_worker.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.99.0";
 import { response, readLimited } from "../_shared/http.ts";
 import { hmacValid, sameSecret } from "../_shared/meta.ts";
@@ -51,6 +52,7 @@ Deno.serve(async (req: Request) => {
             return response({ error: "INGESTION_RETRY_REQUIRED" }, 503);
         }
       }
+    kickWorker();
     return response({ ok: true });
   } catch (e) {
     return response(

@@ -10,7 +10,7 @@ update public.profiles set role='kitchen',sector='bar',active=true where id='c00
 update public.profiles set role='cashier',active=true where id='c0000000-0000-0000-0000-000000000004';
 insert into public.terminals(id,name) values('c1000000-0000-0000-0000-000000000001','Terminal online de teste');
 insert into app_private.terminal_leases(user_id,session_id,expires_at,terminal_id) select id,'online-test',now()+interval '10 minutes','c1000000-0000-0000-0000-000000000001' from public.profiles where id in('c0000000-0000-0000-0000-000000000002','c0000000-0000-0000-0000-000000000003','c0000000-0000-0000-0000-000000000004');
-insert into public.products(id,name,category,price_cents,sector,allowed_modifiers) values('test-online-burger','Burger teste','hamburgueres',1000,'grill',array['Sem cebola']),('test-online-drink','Bebida teste','bebidas',500,'bar','{}');
+insert into public.products(id,name,category,price_cents,sector,image_path,allowed_modifiers) values('test-online-burger','Burger teste','hamburgueres',1000,'grill','/menu/hamburgueres.svg',array['Sem cebola']),('test-online-drink','Bebida teste','bebidas',500,'bar','/menu/bebidas.svg','{}');
 insert into public.ingredients(id,name,unit,stock,unit_cost_cents) values('c2000000-0000-0000-0000-000000000001','Insumo online teste','un',100,100);
 insert into public.recipe_items values('test-online-burger','c2000000-0000-0000-0000-000000000001',1);
 select set_config('test.items','[{"product_id":"test-online-burger","quantity":1,"unit_price_cents":1},{"product_id":"test-online-burger","quantity":1,"modifiers":["Sem cebola"]},{"product_id":"test-online-drink","quantity":1}]',true);
