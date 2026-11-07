@@ -1,6 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2.99.0";
 import { response } from "../_shared/http.ts";
-import { sameSecret, MetaClient, faq } from "../_shared/meta.ts";
+import { sameSecret, MetaClient } from "../_shared/meta.ts";
+import { customerAssistant, assistantOrderLink } from "../_shared/customer_assistant.ts";
+import { onlineRpc } from "../_shared/online.ts";
+import { sendOnlineNotifications } from "../_shared/online_notifications.ts";
 const labels: Record<string, string> = {
   "order.cancelled":
     "cancelado; se já pagou, fale com a loja para conferência e devolução",
@@ -85,10 +88,15 @@ Deno.serve(async (req: Request) => {
     try {
       if (new Date(job.received_at).getTime() < Date.now() - 23 * 3600000)
         throw new Error("CONVERSATION_WINDOW_EXPIRED");
-      await meta.text(
-        job.sender,
-        faq(job.body, Deno.env.get("WHATSAPP_MENU_URL") || ""),
-      );
+      const handoff = /\b(humano|atendente|pessoa)\b/i.test(job.body);
+      const automatic = await onlineRpc<boolean>("online_automation_allowed", { p_sender: job.sender, p_handoff: handoff });
+      if (automatic || handoff) {
+        const history = await onlineRpc<{ role: string; content: string }[]>("online_assistant_history", { p_sender: job.sender });
+        const reply = await customerAssistant(job.body, history.slice(0, -1));
+        if (reply.handoff) await onlineRpc("online_automation_allowed", { p_sender: job.sender, p_handoff: true });
+        const link = reply.items.length ? assistantOrderLink(reply.items) : Deno.env.get("WHATSAPP_MENU_URL") || "";
+        await meta.text(job.sender, `${reply.reply}${link ? `\nConfira e finalize no site: ${link}` : ""}`);
+      }
       success = true;
       sent++;
     } catch {
@@ -100,5 +108,6 @@ Deno.serve(async (req: Request) => {
     });
     if (error) return response({ error: "ACK_UNCONFIRMED" }, 503);
   }
-  return response({ sent, retry });
+  const online = await sendOnlineNotifications(meta);
+  return response({ sent: sent + online.sent, retry: retry + online.retry });
 });

@@ -15,7 +15,7 @@ import { filterMenu, publicProducts } from "../src/public/menuData.js";
 test("every internal module follows the same least-privilege role matrix", () => {
   const expected = {
     admin: accessModules.map((m) => m.path),
-    cashier: ["/pdv", "/atendimento"],
+    cashier: ["/pedidos-online", "/pdv", "/atendimento"],
     kitchen: ["/cozinha"],
   };
   for (const role of [

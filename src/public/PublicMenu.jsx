@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowDown,
+  ShoppingBag,
+  Plus,
   ArrowRight,
   Flame,
   LockKeyhole,
@@ -15,6 +17,10 @@ import { money } from "../lib/operations";
 import { configured, loadPublicMenu } from "./menuApi";
 import { filterMenu, publicProducts } from "./menuData";
 import "./PublicMenu.css";
+import "./CustomerOrder.css";
+import { useCart } from "./cart";
+import { customerApi } from "./customerApi";
+import CustomerChat from "./CustomerChat";
 
 const referenceMenu = publicProducts(
   sourceMenu.map((p) => ({
@@ -24,7 +30,7 @@ const referenceMenu = publicProducts(
   })),
 );
 
-function MenuItem({ product }) {
+function MenuItem({ product, onAdd }) {
   const [failed, setFailed] = useState(false);
   return (
     <article className="menu-item" data-menu-product>
@@ -50,12 +56,16 @@ function MenuItem({ product }) {
           {product.description || "Consulte os ingredientes com nossa equipe."}
         </p>
         <strong className="menu-price">{money(product.price_cents)}</strong>
+        <button type="button" className="menu-add" onClick={() => onAdd(product)} aria-label={`Adicionar ${product.name}`}><Plus size={16} />Adicionar</button>
       </div>
     </article>
   );
 }
 
 export default function PublicMenu() {
+  const { items, add } = useCart();
+  const [shop, setShop] = useState(null);
+  useEffect(() => { const c = new AbortController(); customerApi("config", {}, c.signal).then(setShop).catch(() => {}); return () => c.abort(); }, []);
   const [products, setProducts] = useState(configured ? [] : referenceMenu);
   const [loading, setLoading] = useState(configured);
   const [error, setError] = useState("");
@@ -98,9 +108,7 @@ export default function PublicMenu() {
     };
   }, [load]);
   const filtered = filterMenu(products, category, query);
-  const availableCategories = categories.filter(
-    ([id]) => id === "all" || products.some((p) => p.category === id),
-  );
+  const availableCategories = [...categories.filter(([id]) => id === "all" || products.some((p) => p.category === id)), ...[...new Set(products.map((p) => p.category))].filter((id) => !categories.some(([known]) => id === known)).map((id) => [id, id])];
 
   return (
     <div className="menu-page">
@@ -149,7 +157,7 @@ export default function PublicMenu() {
             </a>
             <div className="menu-hero-note">
               <Utensils size={17} />
-              Escolha por aqui. Peça com nossa equipe.
+              Escolha, personalize e acompanhe seu pedido por aqui.
             </div>
           </div>
           <div className="menu-hero-art">
@@ -172,10 +180,11 @@ export default function PublicMenu() {
                 Nosso cardápio<span>.</span>
               </h2>
             </div>
-            <label className="menu-search">
+            <div className="menu-search">
               <Search size={19} aria-hidden="true" />
-              <span className="sr-only">Buscar no cardápio</span>
+              <label className="sr-only" htmlFor="public-menu-search">Buscar no cardápio</label>
               <input
+                id="public-menu-search"
                 type="search"
                 placeholder="O que você procura?"
                 value={query}
@@ -190,7 +199,7 @@ export default function PublicMenu() {
                   <X size={18} />
                 </button>
               )}
-            </label>
+            </div>
           </div>
           <div
             className="menu-categories"
@@ -235,11 +244,12 @@ export default function PublicMenu() {
                 {filtered.length} {filtered.length === 1 ? "opção" : "opções"}
                 {query && ` para “${query}”`}
               </p>
-              <div className="menu-products">
-                {filtered.map((p) => (
-                  <MenuItem key={p.id} product={p} />
-                ))}
-              </div>
+              {availableCategories.filter(([id]) => id !== "all" && filtered.some((p) => p.category === id)).map(([id, label]) => (
+                <section className="menu-category-section" key={id} aria-labelledby={`category-${id}`}>
+                  <div className="menu-section-heading"><h3 id={`category-${id}`}>{label}</h3><span>{filtered.filter((p) => p.category === id).length} opções</span></div>
+                  <div className="menu-products">{filtered.filter((p) => p.category === id).map((p) => <MenuItem key={p.id} product={p} onAdd={add} />)}</div>
+                </section>
+              ))}
               {!filtered.length && !error && (
                 <div className="menu-empty">
                   <Utensils size={30} />
@@ -289,6 +299,8 @@ export default function PublicMenu() {
           <ArrowRight size={14} />
         </Link>
       </footer>
+      {items.length > 0 && <div className="customer-cart-bar"><span><ShoppingBag size={20} /><strong>{items.reduce((n,i) => n+i.quantity,0)} itens</strong><small>Subtotal estimado {money(items.reduce((n,i) => n+i.price_cents*i.quantity,0))}</small></span><Link to="/pedido">Revisar meu pedido<ArrowRight size={18} /></Link></div>}
+      <CustomerChat shop={shop} catalog={shop?.catalog || products} />
     </div>
   );
 }
