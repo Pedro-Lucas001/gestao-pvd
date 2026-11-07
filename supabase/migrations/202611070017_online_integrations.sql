@@ -38,7 +38,7 @@ begin
   ident:=case when tg_table_name='online_payments' then 'online:' else 'pos:' end||new.id::text;
   insert into app_private.manual_bank_references values(new.provider_reference,ident) on conflict(reference) do nothing;
   select payment_identity into existing from app_private.manual_bank_references where reference=new.provider_reference;
-  if existing<>ident then raise exception 'bank_reference_already_used';end if;
+  if existing<>ident then raise exception 'bank_reference_already_used' using errcode='23505';end if;
  end if;return new;
 end $$;
 create trigger online_bank_reference before insert or update on public.online_payments for each row execute function app_private.unique_manual_bank_reference();

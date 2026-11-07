@@ -306,3 +306,13 @@ test("an empty station never promises less than one item's preparation average",
     3,
   );
 });
+
+test("customer cart strips client prices and preserves line customizations", async () => {
+  const { cartPayload, draftLine, patchCart, trackingToken } = await import("../src/public/cart.js");
+  const item = { ...draftLine({ id: "burger", name: "Burger", price_cents: 1 }), modifiers: ["Sem cebola"], notes: "Bem quente" };
+  assert.deepEqual(cartPayload([item]), [{ product_id: "burger", quantity: 1, modifiers: ["Sem cebola"], notes: "Bem quente" }]);
+  assert.equal(patchCart([item], item.line_id, { quantity: 0 }).length, 0);
+  assert.equal(patchCart([item], item.line_id, { quantity: 100 })[0].quantity, 100);
+  assert.match(trackingToken(), /^[a-f0-9]{64}$/);
+  assert.notEqual(trackingToken(), trackingToken());
+});

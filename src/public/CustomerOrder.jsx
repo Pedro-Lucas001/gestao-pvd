@@ -4,7 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { ArrowLeft, ArrowRight, CheckCircle2, Clock, CreditCard, ShoppingBag, Truck } from "lucide-react";
 import { cents, money } from "../lib/operations";
 import { customerApi, configured } from "./customerApi";
-import { useCart, cartPayload, draftLine, trackingToken } from "./cart";
+import { useCart, cartPayload, draftLine, trackingToken, operationKey } from "./cart";
 import CartEditor from "./CartEditor";
 import CustomerChat from "./CustomerChat";
 import "./PublicMenu.css";
@@ -20,7 +20,7 @@ function Header() { return <header className="menu-header customer-order-header"
 
 function Payment({ order, tracking }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [artifact, setArtifact] = useState(null);
-  const [key] = useState(() => crypto.randomUUID());
+  const [key] = useState(() => operationKey());
   const payment = order.payments.find((p) => p.status === "pending");
   const pix = artifact?.pix || payment?.pix_code;
   const checkout = artifact?.url || payment?.checkout_url;
@@ -46,7 +46,7 @@ function Payment({ order, tracking }) {
 function ChangeRequest({ order, tracking, catalog, onDone }) {
   const [items, setItems] = useState(() => order.items.map((i) => draftLine({ ...i, price_cents: i.unit_price_cents }, i.quantity)));
   const [reason, setReason] = useState(""), [quote, setQuote] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const [key] = useState(() => crypto.randomUUID());
+  const [key] = useState(() => operationKey());
   const [submission, setSubmission] = useState(null);
   useEffect(() => {
     if (!items.length) return;
@@ -115,7 +115,7 @@ export default function CustomerOrder() {
   async function submit(event) {
     event.preventDefault(); if (busy || (!quote && !submission)) return;
     let request = submission;
-    try { if (!request) request = { key: crypto.randomUUID(), tracking: trackingToken(), items: cartPayload(items), contact: { ...contact, phone: phoneNumber(contact.phone) }, fulfillment, method, change_for_cents: method === "cash" && needsChange ? cents(changeFor) : null, expected_total_cents: quote.total_cents, view_items: items }; }
+    try { if (!request) request = { key: operationKey(), tracking: trackingToken(), items: cartPayload(items), contact: { ...contact, phone: phoneNumber(contact.phone) }, fulfillment, method, change_for_cents: method === "cash" && needsChange ? cents(changeFor) : null, expected_total_cents: quote.total_cents, view_items: items }; }
     catch { setError("Informe um valor válido para o troco."); return; }
     try { sessionStorage.setItem(pendingSlot, JSON.stringify(request)); } catch { setError("Ative o armazenamento desta aba para preservar a tentativa antes de enviar."); return; }
     setSubmission(request); setBusy(true); setKnownRejected(false); setError("");
