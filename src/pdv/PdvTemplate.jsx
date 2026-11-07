@@ -1,3 +1,5 @@
+import { productImageUrl } from "../lib/productImages";
+import { supabaseUrl } from "../lib/supabaseConfig";
 import { useState } from "react";
 import {
   Check,
@@ -22,7 +24,7 @@ function ProductImage({ product }) {
         ? (
           <img
             className="pl:h-full pl:w-full pl:object-contain"
-            src={product.image_path}
+            src={productImageUrl(product.image_path, supabaseUrl)}
             alt=""
             loading="lazy"
             onError={() => setFailed(true)}

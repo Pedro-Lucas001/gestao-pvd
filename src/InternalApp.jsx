@@ -39,6 +39,8 @@ import { homeForRole } from "./auth/permissions";
 import { accessModules } from "./auth/modules";
 import "./App.css";
 const OnlineOrders = lazy(() => import("./admin/OnlineOrders"));
+const AdminDashboard = lazy(() => import("./admin/AdminDashboard"));
+const StaffHome = lazy(() => import("./auth/StaffHome"));
 const DRE = lazy(() => import("./admin/DRE"));
 const Reports = lazy(() => import("./admin/Reports"));
 const Inventory = lazy(() => import("./admin/Inventory"));
@@ -275,7 +277,8 @@ function Denied() {
 function AdminModule({ kind }) {
   const views = {
     "pedidos-online": OnlineOrders,
-    dashboard: Reports,
+    funcionario: StaffHome,
+    dashboard: AdminDashboard,
     relatorios: Reports,
     dre: DRE,
     estoque: Inventory,

@@ -1,5 +1,6 @@
 // A mesma matriz governa a navegação e as rotas; o banco valida as operações.
 export const accessModules = [
+  { path: "/funcionario", label: "Área do funcionário", icon: "team", roles: ["cashier", "kitchen"] },
   { path: "/pedidos-online", label: "Pedidos online", icon: "sales", roles: ["admin", "cashier"] },
   {
     path: "/pdv",

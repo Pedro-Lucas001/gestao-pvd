@@ -1,3 +1,5 @@
+import { productImageUrl } from "../lib/productImages";
+import { supabaseUrl } from "../lib/supabaseConfig";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -37,7 +39,7 @@ function MenuItem({ product, onAdd }) {
       <div className="menu-item-image">
         {product.image_path && !failed ? (
           <img
-            src={product.image_path}
+            src={productImageUrl(product.image_path, supabaseUrl)}
             alt=""
             loading="lazy"
             onError={() => setFailed(true)}

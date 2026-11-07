@@ -1,55 +1,187 @@
-import { useState } from 'react';
-
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { rpc, supabase } from "../lib/supabase";
+import { command } from "./commands";
+import { cents, money } from "../lib/operations";
+function today() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Recife",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
 export default function DRE() {
-  const [metrics] = useState({
-    faturacaoBruta: 12450.00,
-    cmv: 3850.00,
-    despesasFixas: 2100.00,
-    pedidosTotal: 342
-  });
-
-  const lucroLiquido = metrics.faturacaoBruta - metrics.cmv - metrics.despesasFixas;
-  const margemLucro = ((lucroLiquido / metrics.faturacaoBruta) * 100).toFixed(1);
-
+  const [reference, setReference] = useState(today),
+    [summary, setSummary] = useState(null),
+    [expenses, setExpenses] = useState([]),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [version, setVersion] = useState(0),
+    [success, setSuccess] = useState("");
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const snapshot = await rpc("admin_control_snapshot", {
+            p_reference: reference,
+          }),
+          p = snapshot.periods.month;
+        const { data, error } = await supabase
+          .from("operating_expenses")
+          .select("id,description,amount_cents,expense_date")
+          .gte("expense_date", p.from)
+          .lte("expense_date", p.to)
+          .order("expense_date", { ascending: false });
+        if (error) throw error;
+        if (alive) {
+          setSummary(p);
+          setExpenses(data);
+          setError("");
+        }
+      } catch {
+        if (alive) {
+          setError("Não foi possível consultar o resultado e as despesas.");
+          setSummary(null);
+        }
+      }
+    }
+    const t = setTimeout(load, 0);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [reference, version]);
+  async function submit(e) {
+    e.preventDefault();
+    const form = e.currentTarget,
+      f = new FormData(form);
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await command("record_operating_expense", {
+        p_description: f.get("description"),
+        p_amount: cents(String(f.get("amount"))),
+        p_date: f.get("date"),
+        p_reason: f.get("reason"),
+      });
+      form.reset();
+      setSuccess("Despesa registrada. O resultado considera a data informada.");
+      setVersion((v) => v + 1);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <div className="min-h-screen bg-dark-900 text-white font-sans p-8 overflow-y-auto">
-      <header className="mb-10">
-        <h1 className="text-4xl font-bold tracking-tight">Dashboard <span className="text-brasa-500">Executivo</span></h1>
-        <p className="text-gray-400 mt-2">Demonstração de Resultados (Mês Atual)</p>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <div className="bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-glass">
-          <h3 className="text-gray-400 font-bold mb-2 uppercase tracking-wider text-sm">Faturação Bruta</h3>
-          <p className="text-3xl font-bold text-white">R$ {metrics.faturacaoBruta.toFixed(2)}</p>
-          <span className="text-green-500 text-sm font-bold flex items-center gap-1 mt-2">
-            +14% vs mês anterior
-          </span>
+    <section className="management">
+      <span className="eyebrow">RESULTADO GERENCIAL</span>
+      <h1>Recebimentos, custos e despesas.</h1>
+      <p>
+        Resultado por movimentos confirmados do balcão e do site. Registre as
+        despesas reais da operação para acompanhar a estimativa no dashboard.
+      </p>
+      <label>
+        Data de referência do mês
+        <input
+          type="date"
+          required
+          value={reference}
+          max={today()}
+          onChange={(e) => e.target.value && setReference(e.target.value)}
+        />
+      </label>
+      {error && (
+        <p role="alert" className="error-message">
+          {error}
+        </p>
+      )}
+      {success && (
+        <p role="status" className="control-success">
+          {success}
+        </p>
+      )}
+      {summary && (
+        <div className="metric-grid">
+          {[
+            ["Recebimentos após devoluções", money(summary.net_received_cents)],
+            ["Custo dos insumos baixados", money(summary.cost_cents)],
+            ["Despesas registradas", money(summary.expenses_cents)],
+            [
+              "Resultado estimado",
+              summary.result_cents === null
+                ? "Custos incompletos"
+                : money(summary.result_cents),
+            ],
+          ].map(([label, value]) => (
+            <article className="metric" key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </article>
+          ))}
         </div>
-
-        <div className="bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-glass">
-          <h3 className="text-gray-400 font-bold mb-2 uppercase tracking-wider text-sm">Custo (CMV)</h3>
-          <p className="text-3xl font-bold text-red-400">R$ {metrics.cmv.toFixed(2)}</p>
-          <span className="text-gray-500 text-sm font-bold mt-2 block">
-            {((metrics.cmv / metrics.faturacaoBruta) * 100).toFixed(1)}% da faturação
-          </span>
+      )}
+      <p>
+        O resultado depende de fichas, custos e despesas cadastrados. Valores
+        antigos sem cobertura de custos ficam sinalizados; taxas e impostos não
+        cadastrados não entram na estimativa.{" "}
+        <Link to="/dashboard">Ver dia, semana e mês →</Link>
+      </p>
+      <form className="management-panel form-columns" onSubmit={submit}>
+        <h2 className="span-all">Registrar despesa</h2>
+        <label>
+          Descrição
+          <input name="description" required minLength={2} maxLength={150} />
+        </label>
+        <label>
+          Valor (R$)
+          <input
+            name="amount"
+            required
+            inputMode="decimal"
+            placeholder="Ex.: 120,50"
+          />
+        </label>
+        <label>
+          Data da despesa
+          <input name="date" required type="date" defaultValue={today()} />
+        </label>
+        <label>
+          Justificativa
+          <input name="reason" required minLength={5} maxLength={500} />
+        </label>
+        <button className="primary" disabled={busy}>
+          {busy ? "Registrando…" : "Registrar despesa"}
+        </button>
+      </form>
+      <article className="management-panel">
+        <h2>Despesas do mês até a data escolhida</h2>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {expenses.map((e) => (
+                <tr key={e.id}>
+                  <td>{e.expense_date.split("-").reverse().join("/")}</td>
+                  <td>{e.description}</td>
+                  <td>{money(e.amount_cents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!expenses.length && (
+            <p>Nenhuma despesa registrada neste intervalo.</p>
+          )}
         </div>
-
-        <div className="bg-dark-800 p-6 rounded-2xl border border-brasa-500/50 shadow-brasa-glow relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-brasa-500/10 rounded-full blur-3xl"></div>
-          <h3 className="text-gray-400 font-bold mb-2 uppercase tracking-wider text-sm">Lucro Líquido</h3>
-          <p className="text-4xl font-bold text-brasa-500">R$ {lucroLiquido.toFixed(2)}</p>
-          <span className="text-white text-sm font-bold mt-2 block">
-            Margem: {margemLucro}%
-          </span>
-        </div>
-
-        <div className="bg-dark-800 p-6 rounded-2xl border border-dark-700 shadow-glass">
-          <h3 className="text-gray-400 font-bold mb-2 uppercase tracking-wider text-sm">Total Pedidos</h3>
-          <p className="text-3xl font-bold text-white">{metrics.pedidosTotal}</p>
-          <span className="text-gray-500 text-sm font-bold mt-2 block">Ticket Médio: R$ {(metrics.faturacaoBruta / metrics.pedidosTotal).toFixed(2)}</span>
-        </div>
-      </div>
-    </div>
+      </article>
+    </section>
   );
 }

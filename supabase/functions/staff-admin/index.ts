@@ -21,11 +21,12 @@ Deno.serve(async (req: Request) => {
     error,
   } = await userClient.auth.getUser();
   if (error || !user) return reply({ error: "AUTH_REQUIRED" }, 401);
-  const { data: profile, error: profileError } = await userClient.rpc(
-    "operator_context",
-  );
+  const { data: profile, error: profileError } =
+    await userClient.rpc("operator_context");
   if (
-    profileError || !profile?.active || profile.role !== "admin" ||
+    profileError ||
+    !profile?.active ||
+    profile.role !== "admin" ||
     profile.requires_password
   ) {
     return reply({ error: "ADMIN_REQUIRED" }, 403);
@@ -42,6 +43,12 @@ Deno.serve(async (req: Request) => {
       body.password.length > 256 ||
       typeof body.name !== "string" ||
       body.name.trim().length < 2 ||
+      body.name.trim().length > 100 ||
+      (body.role === "kitchen" &&
+        !["grill", "fryer", "bar"].includes(body.sector)) ||
+      (body.role !== "admin" &&
+        (typeof body.pin !== "string" || !/^[0-9]{4}$/.test(body.pin))) ||
+      (body.role === "admin" && Boolean(body.pin)) ||
       !["admin", "cashier", "kitchen"].includes(body.role)
     ) {
       return reply({ error: "INVALID_STAFF_DATA" }, 400);
@@ -60,13 +67,17 @@ Deno.serve(async (req: Request) => {
     if (error || !data.user) {
       return reply({ error: "USER_CREATION_FAILED_CHECK_EXISTING_EMAIL" }, 409);
     }
-    const { error: activation } = await userClient.rpc("manage_staff", {
-      p_user: data.user.id,
-      p_role: body.role,
-      p_sector: body.role === "kitchen" ? body.sector : null,
-      p_active: true,
-      p_reason: "Cadastro autorizado de funcionário pela administração",
-    });
+    const { error: activation } = await userClient.rpc(
+      "admin_save_staff_access",
+      {
+        p_user: data.user.id,
+        p_role: body.role,
+        p_sector: body.role === "kitchen" ? body.sector : null,
+        p_active: true,
+        p_pin: body.role === "admin" ? null : body.pin,
+        p_reason: "Cadastro autorizado de funcionário pela administração",
+      },
+    );
     if (activation) {
       return reply(
         {
@@ -76,25 +87,12 @@ Deno.serve(async (req: Request) => {
         409,
       );
     }
-    if (body.pin) {
-      const { error } = await userClient.rpc("set_staff_pin", {
-        p_user: data.user.id,
-        p_pin: body.pin,
-      });
-      if (error) {
-        return reply(
-          { error: "ACCOUNT_CREATED_SET_PIN_IN_TEAM", userId: data.user.id },
-          409,
-        );
-      }
-    }
     return reply({ ok: true, userId: data.user.id }, 201);
   } catch (e) {
     return reply(
       {
-        error: e instanceof RangeError
-          ? "PAYLOAD_TOO_LARGE"
-          : "INVALID_REQUEST",
+        error:
+          e instanceof RangeError ? "PAYLOAD_TOO_LARGE" : "INVALID_REQUEST",
       },
       400,
     );

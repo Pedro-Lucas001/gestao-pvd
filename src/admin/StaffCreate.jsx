@@ -125,18 +125,21 @@ export default function StaffCreate({ onCreated }) {
               </select>
             </label>
           )}
-          <label>
-            PIN pessoal (opcional)
-            <input
-              name="pin"
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              minLength={4}
-              maxLength={4}
-              autoComplete="new-password"
-            />
-          </label>
+          {role !== "admin" && (
+            <label>
+              PIN pessoal exclusivo (4 dígitos)
+              <input
+                name="pin"
+                required
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                minLength={4}
+                maxLength={4}
+                autoComplete="new-password"
+              />
+            </label>
+          )}
         </fieldset>
         <button className="primary" disabled={busy}>
           {busy ? "Criando acesso…" : "Criar conta individual"}

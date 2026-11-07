@@ -14,9 +14,9 @@ import { filterMenu, publicProducts } from "../src/public/menuData.js";
 
 test("every internal module follows the same least-privilege role matrix", () => {
   const expected = {
-    admin: accessModules.map((m) => m.path),
-    cashier: ["/pedidos-online", "/pdv", "/atendimento"],
-    kitchen: ["/cozinha"],
+    admin: accessModules.filter((m) => m.path !== "/funcionario").map((m) => m.path),
+    cashier: ["/funcionario", "/pedidos-online", "/pdv", "/atendimento"],
+    kitchen: ["/funcionario", "/cozinha"],
   };
   for (const role of [
     "admin",
@@ -234,8 +234,8 @@ test("station estimates use backlog, measured prep time and capacity, with alert
 test("landing pages are selected by verified operator role", async () => {
   const { homeForRole } = await import("../src/auth/permissions.js");
   assert.equal(homeForRole("admin"), "/dashboard");
-  assert.equal(homeForRole("cashier"), "/pdv");
-  assert.equal(homeForRole("kitchen"), "/cozinha");
+  assert.equal(homeForRole("cashier"), "/funcionario");
+  assert.equal(homeForRole("kitchen"), "/funcionario");
   assert.equal(homeForRole(null), "/login");
   assert.equal(homeForRole("customer"), "/login");
 });
@@ -315,4 +315,15 @@ test("customer cart strips client prices and preserves line customizations", asy
   assert.equal(patchCart([item], item.line_id, { quantity: 100 })[0].quantity, 100);
   assert.match(trackingToken(), /^[a-f0-9]{64}$/);
   assert.notEqual(trackingToken(), trackingToken());
+});
+
+test("product images accept managed paths and raster signatures only", async () => {
+  const { productImageUrl, imageFileType } = await import("../src/lib/productImages.js");
+  const path="/storage/v1/object/public/planeta-product-images/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.webp";
+  assert.equal(productImageUrl(path,"https://fixture.supabase.co"),`https://fixture.supabase.co${path}`);
+  assert.equal(productImageUrl("/menu/bebidas.svg"),"/menu/bebidas.svg");
+  for(const p of ["https://attacker.test/pixel.png","javascript:alert(1)","/storage/v1/object/public/private/secret.png","//attacker.test/x","/menu/../../secret.svg"]) assert.equal(productImageUrl(p,"https://fixture.supabase.co"),"");
+  assert.equal(imageFileType(new Uint8Array([137,80,78,71,13,10,26,10])),"image/png");
+  assert.equal(imageFileType(new Uint8Array([255,216,255,0])),"image/jpeg");
+  assert.equal(imageFileType(new TextEncoder().encode('<svg onload="bad"/>')) ,"");
 });
