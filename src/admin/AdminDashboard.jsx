@@ -190,10 +190,14 @@ export function DashboardView({
                         x={i * 24 + 4}
                         y={110 - (Number(d.received_cents) / highest) * 108}
                         width="14"
-                        height={Math.max(
-                          1,
-                          (Number(d.received_cents) / highest) * 108,
-                        )}
+                        height={
+                          Number(d.received_cents) > 0
+                            ? Math.max(
+                                1,
+                                (Number(d.received_cents) / highest) * 108,
+                              )
+                            : 0
+                        }
                         rx="4"
                       />
                       <text x={i * 24 + 11} y="126" textAnchor="middle">

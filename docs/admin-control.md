@@ -33,3 +33,9 @@ Na lista da equipe, admin pode bloquear/ativar, mudar função/setor ou definir 
 ## Validação
 
 `npm run validate`, testes PostgreSQL descartáveis incluindo `supabase/tests/admin_control.sql`, Deno check e testes puros. A suíte cobre imagens e permissões, PIN duplicado com rollback de função/ativação, custos fracionários, balcão mais cobranças complementares do site, devoluções, virada do dia de Recife, limites da semana/mês e ausência de lucro fictício quando faltam custos. Upload real no Storage e criação de usuários devem ser homologados em um projeto de testes; não use os fixtures SQL em produção.
+
+## Prévia visual
+
+A fixture `tests/fixtures/admin-preview.html` permite revisar dashboard, formulário de produto e página dos funcionários no servidor de desenvolvimento. Ela identifica os valores como fictícios, não autentica usuários, não chama o banco e não faz parte da entrada do build de produção. A autorização real continua nos testes de banco e nas rotas autenticadas.
+
+![Dashboard em prévia local com dados fictícios](images/admin-dashboard.jpg)

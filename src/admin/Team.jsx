@@ -26,7 +26,7 @@ export function StaffAccessForm({ person, onSave, busy }) {
           },
           () => {
             setPin("");
-            form.reset();
+            form.elements.reason.value = "";
           },
         );
       }}
@@ -127,7 +127,11 @@ export default function Team() {
       await rpc("admin_save_staff_access", args);
       done();
       setSuccess(
-        "Acesso salvo. O funcionário já pode usar seu PIN no terminal cadastrado.",
+        !args.p_active
+          ? "Acesso bloqueado e sessões de operação revogadas."
+          : args.p_role === "admin"
+            ? "Acesso administrativo salvo. Entrada por e-mail e senha."
+            : "Acesso salvo. O funcionário já pode usar seu PIN no terminal cadastrado.",
       );
       await load();
     } catch (e) {

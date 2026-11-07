@@ -20,7 +20,14 @@ function Photo({ path, name }) {
     />
   );
 }
-export function ProductEditor({ product, onSave, onCancel, busy, error }) {
+export function ProductEditor({
+  product,
+  onSave,
+  onCancel,
+  busy,
+  error,
+  allowUpload = true,
+}) {
   const [image, setImage] = useState(product.image_path || ""),
     [uploading, setUploading] = useState(false),
     [photoError, setPhotoError] = useState("");
@@ -149,6 +156,7 @@ export function ProductEditor({ product, onSave, onCancel, busy, error }) {
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
+                disabled={!allowUpload}
                 onChange={(e) => upload(e.target.files[0])}
               />
             </label>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase, rpc } from "../lib/supabase";
 import { command } from "./commands";
 export default function Inventory() {
@@ -10,6 +10,8 @@ export default function Inventory() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [editing, setEditing] = useState(null);
+  const chooseVersion = useRef(0);
+  const [recipeReady, setRecipeReady] = useState(false);
   async function load() {
     const [i, p] = await Promise.all([
       supabase.from("ingredients").select("*").order("name"),
@@ -41,18 +43,33 @@ export default function Inventory() {
     }
   }
   async function choose(id) {
+    const version = ++chooseVersion.current;
     setProduct(id);
-    const { data: modifierRules } = await supabase
-      .from("recipe_modifier_rules")
-      .select("modifier,ingredient_id,quantity_delta")
-      .eq("product_id", id);
-    setRules(modifierRules || []);
-    const { data, error } = await supabase
-      .from("recipe_items")
-      .select("ingredient_id,quantity")
-      .eq("product_id", id);
-    if (error) setError("Não foi possível carregar a ficha.");
-    else setRecipe(data);
+    setRecipeReady(false);
+    setRecipe([]);
+    setRules([]);
+    if (!id) return;
+    const [rulesResult, recipeResult] = await Promise.all([
+      supabase
+        .from("recipe_modifier_rules")
+        .select("modifier,ingredient_id,quantity_delta")
+        .eq("product_id", id),
+      supabase
+        .from("recipe_items")
+        .select("ingredient_id,quantity")
+        .eq("product_id", id),
+    ]);
+    if (version !== chooseVersion.current) return;
+    if (rulesResult.error || recipeResult.error)
+      setError(
+        "Não foi possível carregar a ficha. Selecione o produto novamente.",
+      );
+    else {
+      setRules(rulesResult.data || []);
+      setRecipe(recipeResult.data || []);
+      setRecipeReady(true);
+      setError("");
+    }
   }
   return (
     <section className="management">
@@ -157,7 +174,7 @@ export default function Inventory() {
                 <th>Insumo</th>
                 <th>Saldo</th>
                 <th>Mínimo</th>
-                <th>Custo em centavos/un.</th>
+                <th>Custo por unidade (R$)</th>
                 <th />
               </tr>
             </thead>
@@ -176,7 +193,13 @@ export default function Inventory() {
                     {i.stock} {i.unit}
                   </td>
                   <td>{i.minimum_stock}</td>
-                  <td>{i.unit_cost_cents}</td>
+                  <td>
+                    {(Number(i.unit_cost_cents) / 100).toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                      maximumFractionDigits: 6,
+                    })}
+                  </td>
                   <td>
                     <button
                       className="text-button"
@@ -410,7 +433,10 @@ export default function Inventory() {
             Justificativa
             <input name="reason" required minLength={5} maxLength={500} />
           </label>
-          <button className="primary" disabled={!product || busy}>
+          <button
+            className="primary"
+            disabled={!product || !recipeReady || busy}
+          >
             Salvar receita
           </button>
           <p>
@@ -422,4 +448,3 @@ export default function Inventory() {
     </section>
   );
 }
-

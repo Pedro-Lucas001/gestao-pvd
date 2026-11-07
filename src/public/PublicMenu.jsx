@@ -33,16 +33,16 @@ const referenceMenu = publicProducts(
 );
 
 function MenuItem({ product, onAdd }) {
-  const [failed, setFailed] = useState(false);
+  const [failedPath, setFailedPath] = useState("");
   return (
     <article className="menu-item" data-menu-product>
       <div className="menu-item-image">
-        {product.image_path && !failed ? (
+        {product.image_path && failedPath !== product.image_path ? (
           <img
             src={productImageUrl(product.image_path, supabaseUrl)}
             alt=""
             loading="lazy"
-            onError={() => setFailed(true)}
+            onError={() => setFailedPath(product.image_path)}
           />
         ) : (
           <Utensils aria-hidden="true" size={32} />
