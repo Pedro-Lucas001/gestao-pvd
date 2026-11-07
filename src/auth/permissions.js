@@ -7,9 +7,7 @@ export function canAccess(role, allowed = []) {
 export function homeForRole(role) {
   return role === "admin"
     ? "/dashboard"
-    : role === "kitchen"
-      ? "/cozinha"
-      : role === "cashier"
-        ? "/pdv"
-        : "/login";
+    : ["cashier", "kitchen"].includes(role)
+      ? "/funcionario"
+      : "/login";
 }

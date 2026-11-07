@@ -113,7 +113,7 @@ nav a.active {
 nav a:hover {
   background: #2d2d2d;
 }
-nav a:nth-child(3) {
+.sidebar nav a:nth-child(3) {
   margin-top: 25px;
 }
 .sidebar-bottom {

@@ -43,7 +43,7 @@ export default function Reports() {
   return (
     <section className="management">
       <span className="eyebrow">INTELIGÊNCIA DA OPERAÇÃO</span>
-      <h1>Resultados do seu Planeta.</h1>
+      <h1>Relatórios detalhados do balcão.</h1><p>Indicadores das vendas do PDV e links anteriores. O dashboard reúne também os pedidos novos do site.</p>
       <DemandPanel compact />
       <form className="filter-row" onSubmit={load}>
         <label>
