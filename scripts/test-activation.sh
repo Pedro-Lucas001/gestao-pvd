@@ -35,4 +35,49 @@ psql_local -c "update public.online_shop_settings set enabled=true,delivery_enab
 for sql in supabase/tests/rls.sql supabase/tests/advanced.sql supabase/tests/tactical.sql supabase/tests/public_menu.sql supabase/tests/online.sql supabase/tests/admin_control.sql; do
   psql_local < "$sql"
 done
-echo 'Activation install, repeat refusal and operational SQL suites passed.'
+
+# Third, incompatible legacy contract: refuse occupied tables and preserve the
+# empty structure with its functions and dependencies before the new install.
+psql_local -c 'create database planeta_legacy_test'
+psql_legacy(){ psql_local -d planeta_legacy_test "$@"; }
+sed '/^create role /d' supabase/tests/bootstrap.sql | psql_legacy
+psql_legacy <<'SQL'
+create table public.profiles(id uuid primary key,full_name text,pin_code text);
+create table public.products(id uuid primary key,price numeric);
+create table public.ingredients(id uuid primary key);
+create table public.technical_sheets(product_id uuid references public.products(id));
+create table public.customers(id uuid primary key);
+create table public.orders(id uuid primary key);
+create table public.order_items(order_id uuid references public.orders(id));
+create table public.audit_logs(id uuid primary key);
+create function public.anonymize_customer_data(target_phone text) returns boolean language sql security definer as $$select false$$;
+insert into public.products values('a0000000-0000-0000-0000-000000000001',10);
+SQL
+if psql_legacy < supabase/activation/02_preservar_legado_vazio.sql > /dev/null 2>&1; then
+  echo 'Legacy transition accepted existing data' >&2; exit 1
+fi
+psql_legacy <<'SQL'
+do $$begin
+  if not exists(select 1 from public.products)
+    or exists(select 1 from pg_namespace where nspname='planeta_legacy_20261107')
+  then raise exception 'Legacy refusal did not preserve the original state';end if;
+end $$;
+delete from public.products;
+SQL
+psql_legacy < supabase/activation/02_preservar_legado_vazio.sql
+psql_legacy <<'SQL'
+do $$begin
+  if (select count(*) from information_schema.tables where table_schema='planeta_legacy_20261107')<>8
+    or to_regprocedure('planeta_legacy_20261107.anonymize_customer_data(text)') is null
+    or to_regprocedure('public.anonymize_customer_data(text)') is not null
+    or has_schema_privilege('anon','planeta_legacy_20261107','usage')
+    or has_function_privilege('anon','planeta_legacy_20261107.anonymize_customer_data(text)','execute')
+  then raise exception 'Legacy structure or privileges were not preserved safely';end if;
+end $$;
+SQL
+psql_legacy < supabase/activation/01_instalacao_nova.sql
+psql_legacy -c 'update public.online_shop_settings set enabled=true,delivery_enabled=true'
+for sql in supabase/tests/public_menu.sql supabase/tests/online.sql supabase/tests/admin_control.sql; do
+  psql_legacy < "$sql"
+done
+echo 'Activation, repeat refusal, legacy preservation/refusal and operational SQL suites passed.'

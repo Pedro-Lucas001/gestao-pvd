@@ -67,12 +67,16 @@ def mock_api(route):
         data={'id':IDS[role],'name':role.capitalize(),'role':role,'active':True,'requires_password':False,'sector':'grill' if role=='kitchen' else None}
     elif path=='/rest/v1/rpc/kitchen_load_snapshot':
         data=[{'sector':sector,'queued_items':0,'preparing_items':0,'average_unit_seconds':180,'reference_unit_seconds':180,'parallel_capacity':3,'critical_items':15,'sample_count':0} for sector in ['grill','fryer','bar']]
+    elif path=='/rest/v1/rpc/admin_control_snapshot':
+        data=None
     elif path=='/rest/v1/rpc/admin_metrics':
         data={'revenue_cents':0,'paid_orders':0,'discounts_cents':0,'cancelled':0,'cancelled_credit_cents':0,'peaks':[],'margins':[],'bottlenecks':[],'low_stock':[]}
     elif path=='/auth/v1/user':
         data={'id':IDS[role],'aud':'authenticated','role':'authenticated','email':role+'@fixture.test','app_metadata':{},'user_metadata':{}}
     elif path=='/rest/v1/profiles':
         data={'id':IDS[role],'name':role.capitalize(),'role':role,'active':True,'sector':'grill' if role=='kitchen' else None}
+        if 'id=eq.' not in route.request.url:
+            data=[data]
     elif path=='/rest/v1/rpc/public_menu':
         data=[{k:product.get(k,'') for k in ['id','name','category','description','price_cents','image_path']} for product in CATALOG]
     elif path=='/rest/v1/products':

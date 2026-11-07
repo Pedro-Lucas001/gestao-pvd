@@ -44,7 +44,7 @@ Interpretação:
 
 - `contrato_ingles = true` e `contrato_portugues = false`: indício da estrutura esperada pelo frontend atual. Confira também o histórico e os resultados das migrações.
 - `contrato_portugues = true`: não aplique automaticamente a sequência em inglês. É necessário avaliar a compatibilidade e eventual migração dos dados primeiro.
-- Ambos falsos: pode ser um banco vazio ou outro esquema. Confirme o projeto antes de instalar qualquer coisa.
+- Ambos falsos: também pode ser o legado com `profiles.full_name`, `pin_code` e `products.price`. Execute o [diagnóstico completo](../supabase/activation/00_diagnostico.sql) e confira as tabelas antes de instalar qualquer coisa.
 - Um indicador 015–018 falso aponta ausência daquele objeto, não identifica sozinho todos os arquivos que faltam. Um indicador verdadeiro também não comprova que uma migração inteira foi aplicada.
 
 Os resultados não revelam credenciais. Não compartilhe senhas, tokens ou chaves privadas.
@@ -332,7 +332,7 @@ bash scripts/test-activation.sh
 
 Os testes SQL exigem Docker e usam exclusivamente bancos descartáveis. O instalador é testado com instalação inicial, recusa de repetição e as suítes operacionais existentes. As fixtures nunca são enviadas para o Supabase da loja.
 
-O CI fixa Deno 2.9.8 e define `DENO_NO_PACKAGE_JSON=1` nos passos das funções. Assim, as funções usam sua configuração em `supabase/functions/deno.json` e não instalam o Vite/PWA/Rollup do frontend. A proteção de idade mínima das dependências continua ativa. As importações do SDK no backend estão fixadas em 2.99.0.
+O CI fixa Deno 2.9.8 e define `DENO_NO_PACKAGE_JSON=1` nos passos das funções. Assim, as funções usam sua configuração em `supabase/functions/deno.json` e não instalam o Vite/PWA/Rollup do frontend. A proteção de idade mínima das dependências continua ativa. As importações do SDK no backend estão fixadas em 2.99.0; o `deno.lock` versionado e a opção `--frozen` fixam também as dependências resolvidas.
 
 Para publicar seletivamente no PowerShell, após login da CLI e configuração segura dos segredos:
 
@@ -346,3 +346,5 @@ Grupos: `core` para acesso/Pix do PDV; `online` inclui core e pedidos do site; `
 O painel **Integrações** mostra a presença das configurações de Pix, Mercado Pago, IA, WhatsApp e templates. Ele não faz cobrança, não verifica aprovação de template e não comprova execução do Cron nem entrega ao cliente.
 
 Antes de abrir: testar cardápio anônimo, foto real, PIN/isolamento de cargos, bloqueio e senha do admin, caixa, estoque por ficha, retry sem duplicação, modalidades de pagamento escolhidas, alteração pela cozinha e avisos consentidos. Confira os resultados financeiro e de custos usando os lançamentos reais.
+
+Para o legado específico vazio com oito tabelas, veja as condições e a transição preservando objetos no [guia de instalação](../supabase/activation/README.md). Essa transição não se aplica a bancos com dados e não substitui uma migração de negócio.

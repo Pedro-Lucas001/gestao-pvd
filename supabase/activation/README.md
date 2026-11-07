@@ -17,6 +17,20 @@ Use somente as migrações faltantes depois de conferir os dados e o histórico.
 Instalar pelo SQL Editor não registra automaticamente o histórico da CLI;
 reconcilie esse histórico antes de usar `db push` futuramente.
 
+Existe uma terceira estrutura antiga com `profiles.full_name`, `pin_code`,
+`products.price` e `technical_sheets`; ela não é identificada somente pelos
+indicadores `name`/`nome`. O diagnóstico inclui `contrato_legado` e a lista de
+tabelas para evitar classificar esse projeto como vazio.
+
+`02_preservar_legado_vazio.sql` é uma transição específica para as oito tabelas
+desse legado, **todas sem registros**, sem usuários, buckets ou gatilhos Auth.
+Depois de revisar a estrutura e as dependências, ele move as tabelas e as quatro
+funções de negócio para um schema privado de preservação, mantendo dependências
+e recusando qualquer dado existente. Não apaga objetos nem serve como migração
+de dados. Só então o projeto pode receber o instalador 01. Não executar 02 em
+outra estrutura ou num sistema em operação. Testes descartáveis verificam recusa
+quando há dados e preservação dos objetos antes da instalação do contrato atual.
+
 O arquivo de instalação é gerado das fontes existentes, com hash por origem:
 
 ```sh

@@ -24,12 +24,8 @@ jobs:
       - name: Check isolated Edge Functions
         env:
           DENO_NO_PACKAGE_JSON: "1"
-        run: deno check --config=supabase/functions/deno.json supabase/functions/*/index.ts
+        run: deno check --config=supabase/functions/deno.json --frozen supabase/functions/*/index.ts
       - name: Test isolated Edge Functions
         env:
           DENO_NO_PACKAGE_JSON: "1"
-        run: deno test --config=supabase/functions/deno.json supabase/functions/_shared/*_test.ts
-      - uses: actions/upload-artifact@v4
-        with:
-          name: edge-functions-lock
-          path: supabase/functions/deno.lock
+        run: deno test --config=supabase/functions/deno.json --frozen supabase/functions/_shared/*_test.ts
