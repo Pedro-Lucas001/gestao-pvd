@@ -53,7 +53,7 @@ create table public.audit_logs(id uuid primary key);
 create function public.anonymize_customer_data(target_phone text) returns boolean language sql security definer as $$select false$$;
 insert into public.products values('a0000000-0000-0000-0000-000000000001',10);
 SQL
-if psql_legacy < supabase/activation/02_preservar_legado_vazio.sql > /dev/null 2>&1; then
+if psql_legacy < supabase/activation/03_transicao_legado_vazio.sql > /dev/null 2>&1; then
   echo 'Legacy transition accepted existing data' >&2; exit 1
 fi
 psql_legacy <<'SQL'
@@ -64,7 +64,7 @@ do $$begin
 end $$;
 delete from public.products;
 SQL
-psql_legacy < supabase/activation/02_preservar_legado_vazio.sql
+psql_legacy < supabase/activation/03_transicao_legado_vazio.sql
 psql_legacy <<'SQL'
 do $$begin
   if (select count(*) from information_schema.tables where table_schema='planeta_legacy_20261107')<>8
@@ -75,7 +75,6 @@ do $$begin
   then raise exception 'Legacy structure or privileges were not preserved safely';end if;
 end $$;
 SQL
-psql_legacy < supabase/activation/01_instalacao_nova.sql
 psql_legacy -c 'update public.online_shop_settings set enabled=true,delivery_enabled=true'
 for sql in supabase/tests/public_menu.sql supabase/tests/online.sql supabase/tests/admin_control.sql; do
   psql_legacy < "$sql"

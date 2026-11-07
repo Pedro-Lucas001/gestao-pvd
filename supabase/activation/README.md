@@ -31,6 +31,12 @@ de dados. Só então o projeto pode receber o instalador 01. Não executar 02 em
 outra estrutura ou num sistema em operação. Testes descartáveis verificam recusa
 quando há dados e preservação dos objetos antes da instalação do contrato atual.
 
+Para revisar/aplicar a transição inteira atomicamente, há o arquivo gerado
+`03_transicao_legado_vazio.sql`: combina 02 e 01 numa única transação e atualiza
+o cache do PostgREST. Uma falha desfaz a operação completa. Ele exige a mesma
+inspeção/autorização do legado e não deve ser seguido pela execução de 01/02.
+O teste descartável cobre esse arquivo completo, inclusive recusa com dados.
+
 O arquivo de instalação é gerado das fontes existentes, com hash por origem:
 
 ```sh

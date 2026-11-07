@@ -47,13 +47,38 @@ update public.online_shop_settings set enabled = false, delivery_enabled = false
 commit;
 `;
 
-const output = new URL("supabase/activation/01_instalacao_nova.sql", root);
+function withoutTransaction(source) {
+  if ((source.match(/^begin;[ \t]*$/gm) || []).length !== 1 ||
+      (source.match(/^commit;[ \t]*$/gm) || []).length !== 1) {
+    throw new Error("Expected one outer transaction before composing activation.");
+  }
+  return source.replace(/^begin;[ \t]*$/m, "").replace(/^commit;[ \t]*$/m, "");
+}
+const legacy = await readFile(new URL("supabase/activation/02_preservar_legado_vazio.sql", root), "utf8");
+const transition = `-- GERADO por npm run activation:prepare. Não editar manualmente.
+-- TRANSIÇÃO ESPECÍFICA: somente legado vazio previamente inspecionado/autorizado.
+-- Preserva oito tabelas e funções em schema privado; instala o contrato atual.
+-- Uma única transação: qualquer falha desfaz a preservação e a instalação.
+-- Não executar 01 ou 02 separadamente depois deste arquivo.
+begin;
+${withoutTransaction(legacy)}
+${withoutTransaction(sql)}
+notify pgrst, 'reload schema';
+commit;
+`;
+const outputs = [
+  ["supabase/activation/01_instalacao_nova.sql", sql],
+  ["supabase/activation/03_transicao_legado_vazio.sql", transition],
+];
+for (const [path, content] of outputs) {
+const output = new URL(path, root);
 if (process.argv.includes("--check")) {
-  if (await readFile(output, "utf8") !== sql) {
+  if (await readFile(output, "utf8") !== content) {
     throw new Error("Instalador desatualizado. Execute npm run activation:prepare.");
   }
   console.log(`Instalador conferido: ${migrations.length} migrações + seed, sem alterações no banco.`);
 } else {
-  await writeFile(output, sql);
+  await writeFile(output, content);
   console.log(`Instalador gerado: ${fileURLToPath(output)}. Nenhum banco foi acessado.`);
+}
 }
