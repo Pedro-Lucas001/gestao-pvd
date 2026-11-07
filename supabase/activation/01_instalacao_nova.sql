@@ -2256,6 +2256,15 @@ insert into public.products(id,name,category,description,price_cents,sector,imag
 insert into public.products(id,name,category,description,price_cents,sector,image_path,allowed_modifiers) values('extra-calabresa','Calabresa','adicionais','Adicional para o seu lanche.',300,'grill','/menu/adicionais.svg',ARRAY[]::text[]) on conflict(id) do nothing;
 insert into public.products(id,name,category,description,price_cents,sector,image_path,allowed_modifiers) values('extra-bacon','Bacon','adicionais','Adicional para o seu lanche.',300,'grill','/menu/adicionais.svg',ARRAY[]::text[]) on conflict(id) do nothing;
 
+-- SOURCE: supabase/activation/04_restringir_rpc.sql
+-- SHA256: 8eabc26c5b64e29e59879a379775663a1a29387a12da6fd50519b4e2eef06f7d
+-- O EXECUTE global concedido a PUBLIC também alcança anon/authenticated.
+-- REVOKE em ALTER DEFAULT PRIVILEGES IN SCHEMA não remove o padrão global.
+-- Preserva todos os GRANTs explícitos dos contratos 001–018.
+
+revoke execute on all functions in schema public from public;
+alter default privileges revoke execute on functions from public;
+
 -- Pedidos públicos começam pausados. Cadastre a loja e homologue antes de abrir.
 update public.online_shop_settings set enabled = false, delivery_enabled = false;
 commit;

@@ -4,6 +4,7 @@ begin;
 select set_config('app.audit_reason','Fixtures isoladas do módulo tático',true);
 create function pg_temp.assert(ok boolean,msg text) returns void language plpgsql as $$
 begin if ok is distinct from true then raise exception 'ASSERT: %',msg; end if; end $$;
+grant execute on function pg_temp.assert(boolean,text) to anon,authenticated,service_role;
 insert into auth.users(id) values
  ('b0000000-0000-0000-0000-000000000001'),('b0000000-0000-0000-0000-000000000002'),
  ('b0000000-0000-0000-0000-000000000003'),('b0000000-0000-0000-0000-000000000004');

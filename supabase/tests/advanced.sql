@@ -3,6 +3,7 @@
 begin;
 select set_config('app.audit_reason','Fixtures isoladas de segurança e comércio',true);
 create function pg_temp.assert(ok boolean,message text) returns void language plpgsql as $$begin if ok is not true then raise exception 'ASSERTION FAILED: %',message;end if;end $$;
+grant execute on function pg_temp.assert(boolean,text) to anon,authenticated,service_role;
 insert into auth.users(id) values('a0000000-0000-0000-0000-000000000001'),('a0000000-0000-0000-0000-000000000002'),('a0000000-0000-0000-0000-000000000003'),('a0000000-0000-0000-0000-000000000004');
 update public.profiles set role='admin',active=true where id='a0000000-0000-0000-0000-000000000001';
 update public.profiles set active=true where id in ('a0000000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000003');
