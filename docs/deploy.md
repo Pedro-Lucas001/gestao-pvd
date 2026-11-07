@@ -10,7 +10,7 @@ Mantenha signup público desativado, senhas fortes e acesso à plataforma restri
 
 ## Banco
 
-As migrations são progressivas, da 001 à 015. Faça backup e aplique primeiro em staging. `supabase/tests/bootstrap.sql` é um fixture de testes em PostgreSQL vazio: **nunca** aplicar em projeto real. `supabase db reset` é só para desenvolvimento local descartável. `supabase db push` e importação inicial de seed exigem vínculo com o projeto correto e credenciais de administração fornecidas com segurança pelo usuário.
+As migrations são progressivas, da 001 à 018. Em projeto totalmente vazio, há também o instalador transacional [01_instalacao_nova.sql](../supabase/activation/01_instalacao_nova.sql), que inclui seed e recusa estruturas existentes; não executar os dois caminhos no mesmo banco. Faça backup e aplique primeiro em staging. `supabase/tests/bootstrap.sql` é um fixture de testes em PostgreSQL vazio: **nunca** aplicar em projeto real. `supabase db reset` é só para desenvolvimento local descartável. `supabase db push` e importação inicial de seed exigem vínculo com o projeto correto e credenciais de administração fornecidas com segurança pelo usuário.
 
 Não reutilize contas/tabelas do SQLite sem migração conferida. Não foram alterados os dados antigos. Planos de retenção, saldos de abertura, histórico de pagamentos, usuários e receitas reais precisam de conferência na migração de negócio.
 

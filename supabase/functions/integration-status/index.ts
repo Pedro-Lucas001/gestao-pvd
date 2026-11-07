@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.99.0";
 import { cors, response } from "../_shared/http.ts";
+import { paymentCapabilities } from "../_shared/online_payments.ts";
 Deno.serve(async (req: Request) => {
   const headers = cors(req);
   if (!headers) return response({ error: "ORIGIN_NOT_ALLOWED" }, 403);
@@ -42,6 +43,14 @@ Deno.serve(async (req: Request) => {
       "WHATSAPP_PHONE_NUMBER_ID",
     ].every(has),
     workerConfigured: has("INTEGRATION_WORKER_SECRET"),
+    onlinePayments: paymentCapabilities(),
+    assistantConfigured: has("OPENAI_API_KEY") &&
+      Deno.env.get("AI_CUSTOMER_EXPORT_ENABLED") === "true",
+    onlineTemplatesConfigured: [
+      "WHATSAPP_ONLINE_STATUS_TEMPLATE",
+      "WHATSAPP_ONLINE_PAYMENT_TEMPLATE",
+    ].every(has),
+    publicSiteConfigured: has("PUBLIC_SITE_URL"),
     tefConfigured: false,
     liveAuthorizationVerified: false,
   });

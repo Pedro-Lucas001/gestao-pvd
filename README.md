@@ -34,7 +34,7 @@ npm ci
 npm run dev
 ```
 
-Sem variáveis abre a prévia; não cria pedidos reais. Para operar, crie o projeto Supabase, aplique **todas as migrações em ordem**, carregue o seed, crie o admin e configure `.env.local` usando `.env.example`. As Edge Functions usam segredos próprios exemplificados em `supabase/.env.example`; **nunca coloque chave bancária, service role, PIN, senha ou tokens em VITE_***.
+Sem variáveis abre a prévia; não cria pedidos reais. Para operar, crie o projeto Supabase, em projeto vazio use o [instalador inicial protegido](supabase/activation/README.md) ou aplique **todas as migrações em ordem (001–018)** e carregue o seed, crie o admin e configure `.env.local` usando `.env.example`. As Edge Functions usam segredos próprios exemplificados em `supabase/.env.example`; **nunca coloque chave bancária, service role, PIN, senha ou tokens em VITE_***.
 
 [Passo a passo de ativação](docs/activation.md) · [Arquitetura](docs/architecture.md) · [Segurança e privacidade](docs/security.md) · [Deploy/pooler/backup](docs/deploy.md).
 

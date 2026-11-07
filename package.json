@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test": "node tests/operations.test.js",
     "test:db": "bash scripts/test-db.sh",
-    "validate": "npm run lint && npm test && npm run build"
+    "validate": "npm run lint && npm test && npm run build",
+    "activation:prepare": "node scripts/prepare-activation.mjs",
+    "activation:check": "node scripts/prepare-activation.mjs --check"
   },
   "dependencies": {
     "@sentry/react": "^10.5.0",

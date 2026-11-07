@@ -73,6 +73,30 @@ export default function Integrations() {
           </p>
         </article>
         <article className="management-panel">
+          <h2>Pagamentos do site</h2>
+          <p>
+            {status?.onlinePayments?.card
+              ? "Configuração do Mercado Pago presente para Pix e cartão online. Homologue as credenciais e o webhook antes de receber pagamentos reais."
+              : status?.onlinePayments?.manual_pix
+                ? "Pix manual disponível no site. O administrador precisa conferir o crédito e registrar o recebimento."
+                : "Pagamentos eletrônicos do site ainda precisam ser configurados. Cadastre Mercado Pago ou Pix manual nos segredos do servidor."}
+          </p>
+          <p>Cartão online usa checkout do provedor e não ativa a maquininha do PDV.</p>
+        </article>
+        <article className="management-panel">
+          <h2>Atendimento com IA</h2>
+          <p>
+            {status?.assistantConfigured
+              ? "Chave da API e autorização do assistente presentes. Teste consentimento, atendimento humano e limites antes de ativar para clientes."
+              : "Configure a chave da API OpenAI, o modelo, os limites e a autorização do assistente no servidor."}
+          </p>
+          <p>
+            {status?.onlineTemplatesConfigured
+              ? "Nomes dos templates online configurados. Confirme aprovação na Meta e teste o aviso de pagamento complementar."
+              : "Cadastre os templates aprovados de status online e Pix complementar para os avisos fora da janela de atendimento."}
+          </p>
+        </article>
+        <article className="management-panel">
           <h2>TEF</h2>
           <p>
             Marca/modelo e serviço homologado ainda não informados. Pagamento

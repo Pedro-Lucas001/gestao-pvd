@@ -8,7 +8,7 @@ O mostruário está em `/` e `/cardapio`; `/login` é exclusivo da equipe. Veja 
 
 ## PostgreSQL real / RLS / auditoria
 
-`npm run test:db` exige Docker local. Sobe PostgreSQL 17 Alpine descartável sem portas publicadas, aplica todas as migrations/seed e duas suites SQL, removendo o container ao final. Não usa banco/credenciais da loja. `supabase/tests/bootstrap.sql` é apenas fixture de Auth para PostgreSQL vazio; nunca aplicar em Supabase real.
+`npm run test:db` exige Docker local. Sobe PostgreSQL 17 Alpine descartável sem portas publicadas, aplica todas as migrations/seed e as suítes SQL operacionais, removendo o container ao final. Não usa banco/credenciais da loja. `supabase/tests/bootstrap.sql` é apenas fixture de Auth para PostgreSQL vazio; nunca aplicar em Supabase real.
 
 `rls.sql` cobre: autoescalada de cargo, grants mínimos, custos/financeiro invisíveis à cozinha, isolamento entre caixas/setores, PIN, cadastro de terminal, total canônico mesmo com preço adulterado, idempotência, gate de pagamento, fichas e baixa única, transições, fechamento e eventos de PSP (apenas contrato SQL).
 
@@ -19,8 +19,8 @@ Asserções falsas e erros inesperados preservam exit status de falha. Os testes
 ## Funções
 
 ```sh
-deno check supabase/functions/*/index.ts
-deno test supabase/functions/_shared/*_test.ts
+DENO_NO_PACKAGE_JSON=1 deno check --config=supabase/functions/deno.json supabase/functions/*/index.ts
+DENO_NO_PACKAGE_JSON=1 deno test --config=supabase/functions/deno.json supabase/functions/_shared/*_test.ts
 ```
 
 Testam corpo bruto e limite de payload, gateway sem configuração recusado, BR Code estático (valor/CRC/campos), nenhuma aprovação bancária falsa, TEF indisponível, HMAC correto/alterado/ausente e FAQ determinístico. Chaves/emails de teste não são credenciais reais. Nenhum Pix, estorno, mensagem ou deploy real é executado.
@@ -33,7 +33,7 @@ Com Playwright Python e Chromium:
 python3 tests/ui_smoke.py
 ```
 
-Inicia Vite em portas descartáveis e valida a prévia e Auth/REST **explicitamente simulados**. Verifica 47 produtos, modificadores inline, celular, bloqueio offline, retry com mesmo corpo/chave, pagamento dinheiro, auto-lock em 10 min, ausência do formulário sensível atrás do bloqueio, PIN para retomar, persistência do bloqueio de admin após reload, redirecionamento por cargo e checkout público que não marca Pix indisponível como pago. Capturas em `/tmp/planeta-pdv-desktop.png`, `/tmp/planeta-pdv-mobile.png` e `/tmp/planeta-idle-lock.png`.
+Inicia Vite em portas descartáveis e valida a prévia e Auth/REST **explicitamente simulados**. Verifica 47 produtos, modificadores inline, celular, bloqueio offline, retry com mesmo corpo/chave, pagamento dinheiro, auto-lock em 10 min, ausência do formulário sensível atrás do bloqueio, PIN de funcionário para retomar, persistência do bloqueio de admin após reload e retomada com senha (senha incorreta mantém o bloqueio), redirecionamento por cargo e checkout público que não marca Pix indisponível como pago. Capturas em `/tmp/planeta-pdv-desktop.png`, `/tmp/planeta-pdv-mobile.png` e `/tmp/planeta-idle-lock.png`.
 
 ## Ainda exige serviços reais
 
@@ -52,3 +52,7 @@ Aplicar/homologar staging Supabase com JWTs reais, Realtime entre terminais, poo
 `python3 tests/tactical_ui_smoke.py` exercita numpad, limpeza/backspace, feedback de bloqueio, Fast-Pass com sessão Auth simulada, redirecionamentos, ausência de menu admin para funcionários, filtros e cores do KDS. O teste implementa um servidor WebSocket Phoenix simulado para verificar que eventos do Supabase causam uma nova consulta e exibem cartões/contagens sem reload. Também valida a troca de cor pelo relógio e layout móvel. Não é uma homologação do Supabase hospedado.
 
 `supabase/tests/tactical.sql`, executado por `npm run test:db`, cobre PIN único, lockout compartilhado, prova descartável de sessão, bloqueio de promoção de sessão por PIN, carga real das praças, média ponderada e custo capturado da DRE em PostgreSQL descartável.
+
+## Instalador inicial
+
+`npm run activation:check` confere que o bundle corresponde às migrações/seed atuais. `bash scripts/test-activation.sh` usa PostgreSQL descartável: instalação atômica, pedidos/entrega pausados, recusa de segunda instalação e suítes SQL operacionais sobre o contrato instalado.

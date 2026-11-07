@@ -57,6 +57,9 @@ def mock_api(route):
     status=200
     if path=='/auth/v1/token':
         role=body['email'].split('@')[0]
+        if body.get('password') == 'wrong-password-fixture':
+            route.fulfill(status=400,content_type='application/json',body=json.dumps({'error':'invalid_grant','error_description':'Invalid login credentials'}))
+            return
         data={'access_token':jwt(role),'refresh_token':'fake-refresh-for-ui-test','token_type':'bearer','expires_in':3600,'user':{'id':IDS[role],'aud':'authenticated','role':'authenticated','email':body['email'],'app_metadata':{},'user_metadata':{}}}
     elif path=='/auth/v1/logout':
         data={}
@@ -167,6 +170,7 @@ if __name__=='__main__':
                     page.get_by_label('PIN de 4 dígitos').fill('1234')
                     page.get_by_role('button',name='Destravar terminal').click()
                 if role=='cashier':
+                    page.get_by_role('link',name='Frente de caixa',exact=False).click()
                     page.get_by_role('button',name='Abrir meu caixa').click()
                     expect(page.locator('[data-product-card]')).to_have_count(47)
                     page.get_by_role('button',name='Adicionar X-Tudo',exact=True).click()
@@ -200,9 +204,18 @@ if __name__=='__main__':
                     expect(page.get_by_label('Tela bloqueada')).to_be_visible()
                     page.reload()
                     expect(page.get_by_label('Tela bloqueada')).to_be_visible()
-                    page.get_by_label('PIN de 4 dígitos').fill('1234')
-                    page.get_by_role('button',name='Destravar terminal').click()
+                    expect(page.get_by_label('PIN de 4 dígitos')).to_have_count(0)
+                    page.get_by_label('Confirme sua senha',exact=True).fill('wrong-password-fixture')
+                    page.get_by_role('button',name='Retomar administração').click()
+                    expect(page.get_by_role('alert')).to_contain_text('Não foi possível confirmar sua senha')
+                    expect(page.get_by_label('Tela bloqueada')).to_be_visible()
+                    page.get_by_label('Confirme sua senha',exact=True).fill('test-password-only')
+                    page.get_by_role('button',name='Retomar administração').click()
                     expect(page.get_by_role('heading',name='Cada insumo sob controle.')).to_be_visible()
+                    page.goto(f'http://127.0.0.1:{app_port}/equipe')
+                    expect(page.get_by_text('Criar acesso da equipe',exact=True)).to_be_visible()
+                    expect(page.get_by_role('heading',name='Criar acesso individual',exact=True)).to_have_count(0)
+                    expect(page.get_by_role('heading',name='Terminais da equipe',exact=True)).to_be_visible()
                 context.close()
             public=browser.new_context()
             public.route('http://127.0.0.1:54399/**',mock_api)
