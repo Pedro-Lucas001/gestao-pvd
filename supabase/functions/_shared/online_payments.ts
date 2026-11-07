@@ -52,6 +52,7 @@ async function mpRequest(path: string, init: RequestInit = {}) {
   return response.json();
 }
 export function amountInCents(value: unknown): number {
+  if (typeof value !== "number" && (typeof value !== "string" || !/^[0-9]+(?:\.[0-9]{1,2})?$/.test(value))) throw new Error("INVALID_PROVIDER_AMOUNT");
   const n = typeof value === "number" ? value : Number(value);
   const cents = Math.round(n * 100);
   if (

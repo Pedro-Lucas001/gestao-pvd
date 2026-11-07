@@ -85,3 +85,9 @@ As respostas finais são montadas pelo servidor, com preço canônico. Não há 
 `npm run validate`: lint, testes JavaScript e build. `npm run test:db`: PostgreSQL descartável, migrações e suítes de RLS/negócio, incluindo `supabase/tests/online.sql`. Deno check e testes puros cobrem assinatura do provedor, URLs permitidas, valores e saídas de IA.
 
 Homologação externa obrigatória antes de ativar: Pix aprovado e callback repetido; cartão aprovado/recusado/retorno interrompido; dinheiro com e sem troco; mudança de taxa entre compra e revisão; aprovação em dois setores e recusa; adição paga antes do preparo revisado; saldo a devolver; bloqueio de turno; WhatsApp dentro/fora da janela com modelos aprovados, consentimento recusado, encaminhamento humano e provedor indisponível. Estes testes não fazem cobranças ou enviam mensagens reais na suíte automatizada.
+
+## Prévia da navegação
+
+Prévia local com o catálogo de referência, filtro de dogs na chapa e carrinho. Não representa pagamento ou pedido de produção.
+
+![Cardápio organizado por categoria e carrinho](images/cardapio-online.jpg)

@@ -124,6 +124,15 @@ select pg_temp.assert(public.online_ai_consent('5581777777777','SEM IA')='revoke
 select pg_temp.assert(public.online_ai_consent('5581777777777','Olá')='required','revogação persiste');
 select pg_temp.assert(exists(select 1 from jsonb_array_elements(public.online_claim_notifications()||public.online_claim_notifications()) n where n->>'topic'='change.accepted' and (n->'payment'->>'amount_cents')::int=1000),'fila prepara cobrança complementar canônica para WhatsApp');
 reset role;
+update public.online_shop_settings set delivery_enabled=true,delivery_fee_cents=100;
+set local role service_role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+select public.online_create_order('c3000000-0000-0000-0000-000000000003',repeat('c',64),'[{"product_id":"test-online-burger","quantity":1}]',current_setting('test.contact')::jsonb||'{"whatsapp_consent":false}'::jsonb,'delivery','cash',null,1100);
+reset role;
+update public.online_shop_settings set delivery_fee_cents=200;
+set local role service_role;
+select pg_temp.assert((public.online_change_quote(repeat('c',64),'[{"product_id":"test-online-burger","quantity":1}]')->>'total_cents')::int=1100,'revisão preserva a taxa de entrega contratada');
+reset role;
 rollback;
 \o
 \echo 'Pedidos online: preços, tokens, RLS, setores, alterações, estoque, Pix e dinheiro passaram.'

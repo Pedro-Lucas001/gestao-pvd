@@ -24,7 +24,7 @@ Deno.test(
   "provider amounts are exact cents and checkout links reject untrusted origins",
   () => {
     assert(amountInCents(19.9) === 1990);
-    for (const invalid of [0, -1, NaN, Infinity, 1.999, "bad"])
+    for (const invalid of [0, -1, NaN, Infinity, 1.999, "bad", true, null, "1e3"])
       throws(() => amountInCents(invalid));
     assert(
       safeCheckoutUrl(
