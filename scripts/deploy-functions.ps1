@@ -12,7 +12,7 @@ try {
   # Explicit allowlist: never deploy the incompatible eco-* contract.
   $functions = @('fast-pass', 'staff-admin', 'integration-status', 'payment-intent', 'checkout-payment')
   if ($Group -in @('online', 'all')) {
-    $functions += @('customer-api', 'customer-assistant', 'online-payment-webhook')
+    $functions += @('customer-api', 'customer-assistant', 'online-payment-webhook', 'print-agent')
   }
   if ($Group -in @('whatsapp', 'all')) {
     $functions += @('whatsapp-webhook', 'whatsapp-send', 'integration-worker')

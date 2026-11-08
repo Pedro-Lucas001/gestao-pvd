@@ -15,7 +15,7 @@ insert into public.products(id,name,category,price_cents,sector,image_path,allow
 insert into public.ingredients(id,name,unit,stock,unit_cost_cents) values('c2000000-0000-0000-0000-000000000001','Insumo online teste','un',100,100);
 insert into public.recipe_items values('test-online-burger','c2000000-0000-0000-0000-000000000001',1);
 select set_config('test.items','[{"product_id":"test-online-burger","quantity":1,"unit_price_cents":1},{"product_id":"test-online-burger","quantity":1,"modifiers":["Sem cebola"]},{"product_id":"test-online-drink","quantity":1}]',true);
-select set_config('test.contact','{"name":"Cliente confidencial","phone":"5581999999999","email":"fixture@example.test","address":"Rua confidencial 123","whatsapp_consent":true}',true);
+select set_config('test.contact','{"name":"Cliente confidencial","phone":"5581999999999","email":"fixture@example.test","address":"Rua confidencial 123","reference":"Perto da praca","whatsapp_consent":true}',true);
 select pg_temp.assert(not has_function_privilege('anon','public.claim_message_replies()','execute') and not has_function_privilege('authenticated','public.ingest_whatsapp(text,text,text,timestamptz)','execute'),'fila WhatsApp não expõe clientes nem aceita mensagens forjadas do navegador');
 select pg_temp.assert(not has_function_privilege('anon','public.online_confirm_payment(uuid,int,text,text,text,text)','execute') and not has_function_privilege('authenticated','public.online_confirm_payment(uuid,int,text,text,text,text)','execute'),'ninguém no navegador confirma recebimento de provedor');
 select pg_temp.assert(not has_function_privilege('anon','public.online_create_order(uuid,text,jsonb,jsonb,text,text,int,int)','execute') and not has_function_privilege('authenticated','public.online_create_order(uuid,text,jsonb,jsonb,text,text,int,int)','execute'),'criação exige Edge e seus limites');
@@ -123,7 +123,10 @@ select pg_temp.assert(public.online_ai_consent('5581777777777','Olá')='required
 select pg_temp.assert(public.online_ai_consent('5581777777777','AUTORIZO IA')='granted','consentimento explícito de IA');
 select pg_temp.assert(public.online_ai_consent('5581777777777','SEM IA')='revoked','revogação de IA');
 select pg_temp.assert(public.online_ai_consent('5581777777777','Olá')='required','revogação persiste');
-select pg_temp.assert(exists(select 1 from jsonb_array_elements(public.online_claim_notifications()||public.online_claim_notifications()) n where n->>'topic'='change.accepted' and (n->'payment'->>'amount_cents')::int=1000),'fila prepara cobrança complementar canônica para WhatsApp');
+do $$declare jobs jsonb:='[]';batch jsonb;begin
+ for attempt in 1..10 loop batch:=public.online_claim_notifications();jobs:=jobs||batch;exit when jsonb_array_length(batch)=0;end loop;
+ perform pg_temp.assert(exists(select 1 from jsonb_array_elements(jobs) n where n->>'topic'='change.accepted' and (n->'payment'->>'amount_cents')::int=1000),'fila prepara cobrança complementar canônica para WhatsApp');
+end $$;
 reset role;
 update public.online_shop_settings set delivery_enabled=true,delivery_fee_cents=100;
 set local role service_role;

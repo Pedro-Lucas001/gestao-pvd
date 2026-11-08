@@ -21,6 +21,7 @@ import {
 } from "./cart";
 import CartEditor from "./CartEditor";
 import CustomerChat from "./CustomerChat";
+import OrderProgress from "./OrderProgress";
 import "./PublicMenu.css";
 import "./CustomerOrder.css";
 
@@ -108,6 +109,20 @@ function Payment({ order, tracking }) {
         <span>Pagamento confirmado pelo valor atual do pedido.</span>
       </div>
     );
+  if (order.payment_method === "card_delivery")
+    return (
+      <div className="customer-payment-note">
+        <h3>Cartão na entrega</h3>
+        <p>
+          Falta receber {money(order.due_cents)} na maquineta que o entregador
+          levará.
+        </p>
+        <p>
+          Crédito ou débito: acréscimo de 6% já incluído no total (
+          {money(order.card_fee_cents)}).
+        </p>
+      </div>
+    );
   if (order.payment_method === "cash")
     return (
       <div className="customer-payment-note">
@@ -134,7 +149,9 @@ function Payment({ order, tracking }) {
       <p>
         {order.paid_cents > 0
           ? "A cozinha aceitou a alteração. A diferença precisa ser confirmada para liberar o preparo revisado."
-          : "O pedido só será liberado para preparo após a confirmação do pagamento."}
+          : order.pay_on_delivery
+            ? "Seu pedido já foi enviado à cozinha. O Pix continua pendente até a confirmação do recebimento. Com sua autorização, enviaremos o código ao seu WhatsApp."
+            : "O pedido só será liberado para preparo após a confirmação do pagamento."}
       </p>
       {!pix && !checkout && (
         <button
@@ -364,8 +381,13 @@ function Tracker({ tracking, shop, catalog, onNew }) {
           <div className="customer-status">
             <Clock size={20} />
             <strong>{states[order.status] || order.status}</strong>
-            <span>Atualização automática</span>
+            <span>Consulta automática a cada 5 segundos</span>
           </div>
+          <OrderProgress order={order} labels={states} />
+          <p className="customer-info">
+            Guarde este link privado para voltar a acompanhar seu pedido. O
+            status do preparo e o pagamento são atualizados separadamente.
+          </p>
           <div className="customer-track-grid">
             <section className="customer-panel">
               <h2>
@@ -392,6 +414,12 @@ function Tracker({ tracking, shop, catalog, onNew }) {
                 <span>
                   Entrega<strong>{money(order.delivery_fee_cents)}</strong>
                 </span>
+                {order.card_fee_cents > 0 && (
+                  <span>
+                    Acréscimo cartão (6%)
+                    <strong>{money(order.card_fee_cents)}</strong>
+                  </span>
+                )}
                 <span>
                   Total atual<strong>{money(order.total_cents)}</strong>
                 </span>
@@ -538,6 +566,7 @@ export default function CustomerOrder() {
         phone: "",
         email: "",
         address: "",
+        reference: "",
         whatsapp_consent: false,
       },
   );
@@ -618,8 +647,12 @@ export default function CustomerOrder() {
   }, [catalog, locationState.hash, setItems, navigate]);
   const loadQuote = useCallback(
     (signal) =>
-      customerApi("quote", { items: cartPayload(items), fulfillment }, signal),
-    [items, fulfillment],
+      customerApi(
+        "quote",
+        { items: cartPayload(items), fulfillment, method },
+        signal,
+      ),
+    [items, fulfillment, method],
   );
   useEffect(() => {
     if (!items.length || !shop || tracking) return;
@@ -627,7 +660,7 @@ export default function CustomerOrder() {
     const timer = setTimeout(() => {
       setQuote(null);
       loadQuote(c.signal)
-        .then(setQuote)
+        .then((q) => setQuote({ ...q, payment_method: method, fulfillment }))
         .catch((e) => {
           if (!c.signal.aborted) setError(e.message);
         });
@@ -636,7 +669,7 @@ export default function CustomerOrder() {
       c.abort();
       clearTimeout(timer);
     };
-  }, [items.length, shop, tracking, loadQuote]);
+  }, [items.length, shop, tracking, loadQuote, method, fulfillment]);
   function field(name, value) {
     setContact((p) => ({ ...p, [name]: value }));
   }
@@ -645,7 +678,12 @@ export default function CustomerOrder() {
     if (busy || (!quote && !submission)) return;
     let request = submission;
     try {
-      if (!request)
+      if (!request) {
+        if (
+          quote.payment_method !== method ||
+          quote.fulfillment !== fulfillment
+        )
+          throw new Error("quote_stale");
         request = {
           key: operationKey(),
           tracking: trackingToken(),
@@ -658,6 +696,7 @@ export default function CustomerOrder() {
           expected_total_cents: quote.total_cents,
           view_items: items,
         };
+      }
     } catch {
       setError("Informe um valor válido para o troco.");
       return;
@@ -696,6 +735,7 @@ export default function CustomerOrder() {
           "price_changed_review_order",
           "invalid_change_amount",
           "delivery_contact_required",
+          "delivery_reference_required",
           "email_required",
           "invalid_contact",
           "product_unavailable",
@@ -784,7 +824,17 @@ export default function CustomerOrder() {
                     <input
                       type="radio"
                       checked={fulfillment === "pickup"}
-                      onChange={() => setFulfillment("pickup")}
+                      onChange={() => {
+                        setFulfillment("pickup");
+                        if (method === "card_delivery")
+                          setMethod(
+                            shop?.payments.pix
+                              ? "pix"
+                              : shop?.cash_enabled
+                                ? "cash"
+                                : "card",
+                          );
+                      }}
                       name="fulfillment"
                     />
                     <ShoppingBag size={19} />
@@ -834,28 +884,44 @@ export default function CustomerOrder() {
                     />
                   </label>
                   <label>
-                    E-mail para pagamentos e eventuais cobranças adicionais
+                    E-mail{" "}
+                    {["pix", "card"].includes(method)
+                      ? "para o pagamento"
+                      : "(opcional)"}
                     <input
                       type="email"
                       autoComplete="email"
                       maxLength={254}
-                      required
+                      required={["pix", "card"].includes(method)}
                       value={contact.email}
                       onChange={(e) => field("email", e.target.value)}
                     />
                   </label>
                   {fulfillment === "delivery" && (
-                    <label>
-                      Endereço completo para entrega
-                      <textarea
-                        required
-                        minLength={10}
-                        maxLength={500}
-                        placeholder="Rua, número, bairro e referência."
-                        value={contact.address}
-                        onChange={(e) => field("address", e.target.value)}
-                      />
-                    </label>
+                    <>
+                      <label>
+                        Endereço completo para entrega
+                        <textarea
+                          required
+                          minLength={10}
+                          maxLength={500}
+                          placeholder="Rua, número, complemento, bairro e cidade."
+                          value={contact.address}
+                          onChange={(e) => field("address", e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Ponto de referência
+                        <input
+                          required
+                          minLength={2}
+                          maxLength={200}
+                          placeholder="Ex.: ao lado da farmácia"
+                          value={contact.reference || ""}
+                          onChange={(e) => field("reference", e.target.value)}
+                        />
+                      </label>
+                    </>
                   )}
                 </fieldset>
                 <h2>3. Como prefere pagar?</h2>
@@ -863,6 +929,15 @@ export default function CustomerOrder() {
                   <legend className="sr-only">Forma de pagamento</legend>
                   {[
                     ["pix", "Pix", shop?.payments.pix],
+                    ...(fulfillment === "delivery"
+                      ? [
+                          [
+                            "card_delivery",
+                            "Cartão na entrega — crédito ou débito",
+                            shop?.delivery_card_enabled,
+                          ],
+                        ]
+                      : []),
                     ["card", "Cartão online", shop?.payments.card],
                     ["cash", "Dinheiro", shop?.cash_enabled],
                   ].map(([id, label, available]) => (
@@ -879,13 +954,15 @@ export default function CustomerOrder() {
                         <small>
                           {!available
                             ? "Indisponível no momento"
-                            : id === "card"
-                              ? "Pagamento no ambiente seguro do provedor."
-                              : id === "cash"
-                                ? "O recebimento será conferido pela loja."
-                                : shop.payments.manual_pix
-                                  ? "Confirmação após conferência da loja."
-                                  : "Confirmação pelo provedor."}
+                            : id === "card_delivery"
+                              ? "O entregador leva a maquineta. Acréscimo de 6% sobre produtos + entrega, já incluído no total."
+                              : id === "card"
+                                ? "Pagamento no ambiente seguro do provedor."
+                                : id === "cash"
+                                  ? "O recebimento será conferido pela loja."
+                                  : shop.payments.manual_pix
+                                    ? "Código Pix no site e no WhatsApp, com sua autorização. Conferência pela loja."
+                                    : "Confirmação pelo provedor."}
                         </small>
                       </span>
                     </label>
@@ -913,8 +990,9 @@ export default function CustomerOrder() {
                         </label>
                       )}
                       <p className="customer-form-note">
-                        Pedidos em dinheiro aguardam a confirmação da loja antes
-                        de entrar na cozinha.
+                        {fulfillment === "delivery"
+                          ? "Seu pedido segue para a cozinha após a confirmação do envio. O dinheiro será conferido no recebimento."
+                          : "Pedidos para retirada em dinheiro aguardam confirmação da loja antes de entrar na cozinha."}
                       </p>
                     </>
                   )}
@@ -936,7 +1014,7 @@ export default function CustomerOrder() {
                   privado no site. Dados de cartão são informados somente no
                   provedor de pagamento.
                 </p>
-                <div className="customer-summary">
+                <div className="customer-summary" aria-live="polite">
                   <span>
                     Produtos
                     <strong>
@@ -949,6 +1027,18 @@ export default function CustomerOrder() {
                       {quote ? money(quote.delivery_fee_cents) : "—"}
                     </strong>
                   </span>
+                  {quote?.card_fee_cents > 0 && (
+                    <span>
+                      Acréscimo cartão (6%)
+                      <strong>{money(quote.card_fee_cents)}</strong>
+                    </span>
+                  )}
+                  {method === "card_delivery" && (
+                    <p>
+                      Crédito e débito têm acréscimo de 6%. Você pagará o total
+                      abaixo na entrega.
+                    </p>
+                  )}
                   <span>
                     Total
                     <strong>
@@ -984,7 +1074,10 @@ export default function CustomerOrder() {
                     busy ||
                     !configured ||
                     !shop?.enabled ||
-                    (!quote && !submission) ||
+                    ((!quote ||
+                      quote.payment_method !== method ||
+                      quote.fulfillment !== fulfillment) &&
+                      !submission) ||
                     !shownItems.length
                   }
                 >

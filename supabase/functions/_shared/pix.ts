@@ -58,3 +58,35 @@ export function brCode(input: {
     "6304";
   return body + crc16(body);
 }
+
+/** Read the static key from the actual charge, rather than a possibly changed
+ * merchant secret. Dynamic provider QR codes may contain no static key. */
+export function staticPixKey(code: string): string | null {
+  if (
+    !/6304[A-Fa-f0-9]{4}$/.test(code) ||
+    crc16(code.slice(0, -4)) !== code.slice(-4).toUpperCase()
+  )
+    return null;
+  function field(bytes: Uint8Array, wanted: string): Uint8Array | null {
+    for (let offset = 0; offset < bytes.length; ) {
+      const header = new TextDecoder().decode(bytes.slice(offset, offset + 4));
+      if (!/^\d{4}$/.test(header)) return null;
+      const size = Number(header.slice(2)),
+        end = offset + 4 + size;
+      if (end > bytes.length) return null;
+      if (header.slice(0, 2) === wanted) return bytes.slice(offset + 4, end);
+      offset = end;
+    }
+    return null;
+  }
+  const account = field(new TextEncoder().encode(code), "26");
+  if (!account) return null;
+  const decoder = new TextDecoder();
+  if (
+    decoder.decode(field(account, "00") || new Uint8Array()).toUpperCase() !==
+    "BR.GOV.BCB.PIX"
+  )
+    return null;
+  const key = field(account, "01");
+  return key ? decoder.decode(key) : null;
+}

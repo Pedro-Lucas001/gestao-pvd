@@ -24,7 +24,17 @@ Deno.test(
   "provider amounts are exact cents and checkout links reject untrusted origins",
   () => {
     assert(amountInCents(19.9) === 1990);
-    for (const invalid of [0, -1, NaN, Infinity, 1.999, "bad", true, null, "1e3"])
+    for (const invalid of [
+      0,
+      -1,
+      NaN,
+      Infinity,
+      1.999,
+      "bad",
+      true,
+      null,
+      "1e3",
+    ])
       throws(() => amountInCents(invalid));
     assert(
       safeCheckoutUrl(
@@ -164,5 +174,22 @@ Deno.test(
     assert(!assistantExportAllowed("false", true));
     assert(!assistantExportAllowed("true", false));
     assert(assistantExportAllowed("true", true));
+  },
+);
+
+import { brCode, staticPixKey } from "./pix.ts";
+Deno.test(
+  "WhatsApp uses the static key from the actual charge and rejects a corrupted code",
+  () => {
+    const code = brCode({
+      key: "fixture@example.test",
+      name: "Planeta Lanches",
+      city: "Carpina",
+      amountCents: 1100,
+      txid: "FIXTURE123",
+    });
+    assert(staticPixKey(code) === "fixture@example.test");
+    assert(staticPixKey(code.slice(0, -4) + "FFFF") === null);
+    assert(staticPixKey("https://untrusted.test/qr") === null);
   },
 );

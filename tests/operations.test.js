@@ -327,3 +327,27 @@ test("product images accept managed paths and raster signatures only", async () 
   assert.equal(imageFileType(new Uint8Array([255,216,255,0])),"image/jpeg");
   assert.equal(imageFileType(new TextEncoder().encode('<svg onload="bad"/>')) ,"");
 });
+
+test("delivery receipt highlights terminal, pending money, reference and exact card fee", async () => {
+  const { receiptText } = await import("../scripts/print-agent/receipt.mjs");
+  const order = { number: 7, revision: 1, created_at: "2026-11-08T20:00:00Z", fulfillment: "delivery", items: [{ name: "Burger", quantity: 1, unit_price_cents: 1000, modifiers: [], notes: "Sem cebola\u001b\u000c" }], subtotal_cents: 1000, delivery_fee_cents: 100, card_fee_cents: 66, total_cents: 1166, paid_cents: 0, due_cents: 1166, payment_method: "card_delivery", contact: { name: "Cliente", phone: "5581999999999", address: "Rua 123", reference: "Farmacia" } };
+  const receipt = receiptText(order);
+  assert.match(receipt, /LEVAR MAQUINETA/);
+  assert.doesNotMatch(receiptText({ ...order, paid_cents: 1166, due_cents: 0 }), /LEVAR MAQUINETA|PAGAMENTO PENDENTE/);
+  assert.match(receipt, /PAGAMENTO PENDENTE/);
+  assert.match(receipt, /6%/);
+  assert.match(receipt, /11,66/);
+  assert.match(receipt, /Referencia: Farmacia/);
+  assert.equal(receipt.includes(String.fromCharCode(27)), false);
+  assert.equal(receipt.includes(String.fromCharCode(12)), false);
+  assert.ok(receipt.split("\n").every((line) => line.length <= 42));
+});
+
+test("cash receipt separates tender and change from revenue", async () => {
+  const { receiptText } = await import("../scripts/print-agent/receipt.mjs");
+  const base = { number: 8, revision: 1, created_at: "2026-11-08T20:00:00Z", fulfillment: "delivery", items: [], subtotal_cents: 1000, delivery_fee_cents: 100, card_fee_cents: 0, total_cents: 1100, paid_cents: 0, due_cents: 1100, payment_method: "cash", cash_change_for_cents: 2000, contact: {} };
+  assert.match(receiptText(base), /Levar troco: R\$\s*9,00/);
+  assert.match(receiptText({ ...base, cash_change_for_cents: null }), /sem troco/);
+  assert.match(receiptText({ ...base, reprint: true }), /SEGUNDA VIA/);
+  assert.match(receiptText({ ...base, due_cents: 0, paid_cents: 1100 }), /Levar troco: R\$\s*9,00/);
+});

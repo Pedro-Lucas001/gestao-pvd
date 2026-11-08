@@ -709,3 +709,13 @@
   height: 16px;
   margin: 1px 0;
 }
+
+.customer-progress { margin: 1.2rem 0; }
+.customer-milestones { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 1rem; }
+.customer-milestones li { flex: 1 1 110px; color: #a9a9af; display: flex; gap: .6rem; align-items: center; }
+.customer-milestones li > span { border: 1px solid currentColor; border-radius: 50%; min-width: 1.8rem; height: 1.8rem; display: grid; place-items: center; }
+.customer-milestones li[data-done="true"] { color: #ffbd79; }
+.customer-milestones li[aria-current="step"] > span { background: #f29335; color: #171310; }
+.customer-progress p, .customer-history { color: #b7b7bd; font-size: .88rem; line-height: 1.7; }
+.customer-history { padding-left: 1.3rem; }
+@media (max-width: 600px) { .customer-milestones { flex-direction: column; } .customer-milestones li { flex-basis: auto; } }

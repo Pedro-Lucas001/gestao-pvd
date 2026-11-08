@@ -1,6 +1,7 @@
 import { MetaClient } from "./meta.ts";
-import { onlineRpc } from "./online.ts";
+import { onlineRpc, publicSite } from "./online.ts";
 import { ensureOnlineIntent, type OnlinePayment } from "./online_payments.ts";
+import { staticPixKey } from "./pix.ts";
 type OnlineJob = {
   id: string;
   topic: string;
@@ -9,12 +10,17 @@ type OnlineJob = {
   phone: string;
   within_window: boolean;
   payment: OnlinePayment | null;
+  tracking: string | null;
 };
 const labels: Record<string, string> = {
   "order.received": "recebido; acompanhe a confirmação e o pagamento no site",
   "order.paid": "pagamento confirmado; pedido liberado à cozinha",
   "order.cash_accepted":
-    "aceito para preparo; o valor em dinheiro continua pendente até o recebimento",
+    "aceito para preparo; consulte o recebimento no acompanhamento",
+  "order.delivery_accepted":
+    "enviado à cozinha; acompanhe as etapas e o pagamento no site",
+  "order.payment_requested": "Pix pendente",
+  "order.preparing": "em preparo",
   "order.ready": "pronto",
   "order.dispatched": "saiu para entrega",
   "order.completed": "concluído",
@@ -30,9 +36,12 @@ export async function sendOnlineNotifications(
     let success = false,
       code: string | null = null;
     try {
-      const label = job.topic.startsWith("change.rejected:")
-        ? "solicitação de alteração não aceita; consulte o acompanhamento"
-        : labels[job.topic];
+      const label =
+        job.topic === "order.payment_requested" && job.due_cents <= 0
+          ? "sem saldo pendente; consulte o acompanhamento"
+          : job.topic.startsWith("change.rejected:")
+            ? "solicitação de alteração não aceita; consulte o acompanhamento"
+            : labels[job.topic];
       if (!label) throw new Error("UNKNOWN_ONLINE_NOTIFICATION");
       const amount = (job.due_cents / 100).toLocaleString("pt-BR", {
         style: "currency",
@@ -42,10 +51,15 @@ export async function sendOnlineNotifications(
         ? (await ensureOnlineIntent(job.payment)).pix
         : null;
       if (job.payment && !pix) throw new Error("PIX_NOT_AVAILABLE");
+      const key = pix ? staticPixKey(pix) : null;
+      const link =
+        job.tracking && /^[a-f0-9]{64}$/.test(job.tracking)
+          ? `${publicSite()}/pedido#acompanhar=${job.tracking}`
+          : null;
       if (job.within_window) {
         await meta.text(
           job.phone,
-          `Planeta Lanches · Pedido #${job.number}: ${label}.${pix ? `\nPagamento complementar pendente: ${amount}.\nPix copia e cola:\n${pix}\nAguarde a confirmação do pagamento para liberar o preparo alterado.` : ""}`,
+          `Planeta Lanches · Pedido #${job.number}: ${label}.${pix ? `\nPagamento pendente: ${amount}.${key ? `\nChave Pix: ${key}` : ""}\nPix copia e cola:\n${pix}\nO recebimento será confirmado pela loja ou pelo provedor.` : ""}${link ? `\nAcompanhe seu pedido: ${link}` : ""}`,
         );
       } else if (pix) {
         const template = Deno.env.get("WHATSAPP_ONLINE_PAYMENT_TEMPLATE");
@@ -54,7 +68,11 @@ export async function sendOnlineNotifications(
           job.phone,
           template,
           Deno.env.get("WHATSAPP_TEMPLATE_LANGUAGE") || "pt_BR",
-          [String(job.number), amount, pix],
+          [
+            String(job.number),
+            amount,
+            key ? `Chave Pix: ${key} · Copia e cola: ${pix}` : pix,
+          ],
         );
       } else {
         const template = Deno.env.get("WHATSAPP_ONLINE_STATUS_TEMPLATE");
@@ -64,7 +82,7 @@ export async function sendOnlineNotifications(
           template,
           Deno.env.get("WHATSAPP_TEMPLATE_LANGUAGE") || "pt_BR",
           String(job.number),
-          label,
+          `${label}${link ? ` · Acompanhe: ${link}` : ""}`,
         );
       }
       success = true;
