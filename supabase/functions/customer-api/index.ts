@@ -14,6 +14,7 @@ const messages: Record<string, string> = {
   price_changed_review_order: "Os valores mudaram. Confira o resumo novamente.",
   invalid_change_amount: "O valor para troco precisa cobrir o total do pedido.",
   delivery_contact_required: "Informe o endereço completo para entrega.",
+  delivery_reference_required: "Informe um ponto de referência para a entrega.",
   email_required: "Informe um e-mail válido para o pagamento.",
   change_not_allowed:
     "O pedido não pode ser alterado nesta etapa ou tem uma cobrança em aberto. Fale com a equipe.",
@@ -73,9 +74,10 @@ Deno.serve(async (req: Request) => {
               p_tracking: body.tracking,
               p_items: body.items,
             })
-          : await onlineRpc("online_quote", {
+          : await onlineRpc("online_delivery_quote", {
               p_items: body.items,
               p_fulfillment: body.fulfillment,
+              p_method: body.method || "pix",
             }),
       );
     if (body.action === "create") {

@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.fast-pass]
 verify_jwt = false
+
+[functions.print-agent]
+verify_jwt = false
