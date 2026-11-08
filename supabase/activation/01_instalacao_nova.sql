@@ -2206,7 +2206,7 @@ revoke all on app_private.admin_cost_coverage,app_private.admin_money_movements 
 revoke all on function app_private.capture_cost_coverage(),app_private.admin_result_period(date,date) from public,anon,authenticated,service_role;
 
 -- SOURCE: supabase/migrations/20261108150436_delivery_checkout.sql
--- SHA256: 9273c1d10b91ea6eb75f644005feb5e3fce9ca311c4afe57e913995d1004d2ea
+-- SHA256: 93a33babab74acb170e59e861f925100e2f4c774b2f334620664e678cdfe5f0a
 -- Entrega: preparo imediato com recebimento pendente; cartão presencial não usa o checkout online.
 alter table public.online_shop_settings add column delivery_card_enabled boolean not null default true;
 alter table public.online_orders drop constraint online_orders_payment_method_check;
@@ -2445,7 +2445,7 @@ create function app_private.online_receipt(p_order uuid) returns jsonb language 
  select jsonb_build_object('number',o.number,'revision',o.revision,'created_at',o.created_at,'fulfillment',o.fulfillment,
  'items',o.items,'subtotal_cents',o.subtotal_cents,'delivery_fee_cents',o.delivery_fee_cents,'card_fee_cents',o.card_fee_cents,
  'total_cents',o.total_cents,'paid_cents',o.paid_cents,'due_cents',greatest(0,o.total_cents-o.paid_cents),
- 'payment_method',o.payment_method,'bring_card_terminal',o.payment_method='card_delivery','cash_change_for_cents',o.cash_change_for_cents,
+ 'payment_method',o.payment_method,'bring_card_terminal',o.payment_method='card_delivery' and o.paid_cents<o.total_cents,'cash_change_for_cents',o.cash_change_for_cents,
  'contact',jsonb_build_object('name',c.name,'phone',c.phone,'address',c.address,'reference',c.reference),
  'change_note',(select reason from public.online_changes where order_id=o.id and status='accepted' order by reviewed_at desc limit 1))
  from public.online_orders o join app_private.online_contacts c on c.order_id=o.id where o.id=p_order
@@ -2507,9 +2507,9 @@ begin
  update app_private.online_print_jobs set status='uncertain',last_error='agent_disconnected' where status='spooling' and lease_until<now();
  select p.* into j from app_private.online_print_jobs p join public.online_orders o on o.id=p.order_id
  where p.status='pending' and p.revision=o.revision and o.status in ('accepted','preparing','ready','dispatched','completed')
- order by p.created_at,p.id for update of p skip locked limit 1;
+ order by p.created_at,p.id for update of p,o skip locked limit 1;
  if not found then return null;end if;
- update app_private.online_print_jobs set status='spooling',bridge_id=bridge,claim_token=gen_random_uuid(),lease_until=now()+interval '3 minutes',attempts=attempts+1 where id=j.id returning * into j;
+ update app_private.online_print_jobs set payload=app_private.online_receipt(j.order_id)||jsonb_build_object('reprint',coalesce((j.payload->>'reprint')::boolean,false)),status='spooling',bridge_id=bridge,claim_token=gen_random_uuid(),lease_until=now()+interval '3 minutes',attempts=attempts+1 where id=j.id returning * into j;
  return jsonb_build_object('id',j.id,'claim',j.claim_token,'payload',j.payload);
 end $$;
 create function public.online_print_finish(p_token text,p_id uuid,p_claim uuid,p_success boolean) returns void language plpgsql security definer set search_path='' as $$

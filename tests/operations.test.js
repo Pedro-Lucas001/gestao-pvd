@@ -330,8 +330,10 @@ test("product images accept managed paths and raster signatures only", async () 
 
 test("delivery receipt highlights terminal, pending money, reference and exact card fee", async () => {
   const { receiptText } = await import("../scripts/print-agent/receipt.mjs");
-  const receipt = receiptText({ number: 7, revision: 1, created_at: "2026-11-08T20:00:00Z", fulfillment: "delivery", items: [{ name: "Burger", quantity: 1, unit_price_cents: 1000, modifiers: [], notes: "Sem cebola\u001b\u000c" }], subtotal_cents: 1000, delivery_fee_cents: 100, card_fee_cents: 66, total_cents: 1166, paid_cents: 0, due_cents: 1166, payment_method: "card_delivery", contact: { name: "Cliente", phone: "5581999999999", address: "Rua 123", reference: "Farmacia" } });
+  const order = { number: 7, revision: 1, created_at: "2026-11-08T20:00:00Z", fulfillment: "delivery", items: [{ name: "Burger", quantity: 1, unit_price_cents: 1000, modifiers: [], notes: "Sem cebola\u001b\u000c" }], subtotal_cents: 1000, delivery_fee_cents: 100, card_fee_cents: 66, total_cents: 1166, paid_cents: 0, due_cents: 1166, payment_method: "card_delivery", contact: { name: "Cliente", phone: "5581999999999", address: "Rua 123", reference: "Farmacia" } };
+  const receipt = receiptText(order);
   assert.match(receipt, /LEVAR MAQUINETA/);
+  assert.doesNotMatch(receiptText({ ...order, paid_cents: 1166, due_cents: 0 }), /LEVAR MAQUINETA|PAGAMENTO PENDENTE/);
   assert.match(receipt, /PAGAMENTO PENDENTE/);
   assert.match(receipt, /6%/);
   assert.match(receipt, /11,66/);

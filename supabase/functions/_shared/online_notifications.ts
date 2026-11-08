@@ -1,6 +1,7 @@
 import { MetaClient } from "./meta.ts";
 import { onlineRpc, publicSite } from "./online.ts";
 import { ensureOnlineIntent, type OnlinePayment } from "./online_payments.ts";
+import { staticPixKey } from "./pix.ts";
 type OnlineJob = {
   id: string;
   topic: string;
@@ -46,6 +47,7 @@ export async function sendOnlineNotifications(
         ? (await ensureOnlineIntent(job.payment)).pix
         : null;
       if (job.payment && !pix) throw new Error("PIX_NOT_AVAILABLE");
+      const key = pix ? staticPixKey(pix) : null;
       const link =
         job.tracking && /^[a-f0-9]{64}$/.test(job.tracking)
           ? `${publicSite()}/pedido#acompanhar=${job.tracking}`
@@ -53,7 +55,7 @@ export async function sendOnlineNotifications(
       if (job.within_window) {
         await meta.text(
           job.phone,
-          `Planeta Lanches · Pedido #${job.number}: ${label}.${pix ? `\nPagamento pendente: ${amount}.\nPix copia e cola:\n${pix}\nO recebimento será confirmado pela loja ou pelo provedor.` : ""}${link ? `\nAcompanhe seu pedido: ${link}` : ""}`,
+          `Planeta Lanches · Pedido #${job.number}: ${label}.${pix ? `\nPagamento pendente: ${amount}.${key ? `\nChave Pix: ${key}` : ""}\nPix copia e cola:\n${pix}\nO recebimento será confirmado pela loja ou pelo provedor.` : ""}${link ? `\nAcompanhe seu pedido: ${link}` : ""}`,
         );
       } else if (pix) {
         const template = Deno.env.get("WHATSAPP_ONLINE_PAYMENT_TEMPLATE");
@@ -62,7 +64,11 @@ export async function sendOnlineNotifications(
           job.phone,
           template,
           Deno.env.get("WHATSAPP_TEMPLATE_LANGUAGE") || "pt_BR",
-          [String(job.number), amount, pix],
+          [
+            String(job.number),
+            amount,
+            key ? `Chave Pix: ${key} · Copia e cola: ${pix}` : pix,
+          ],
         );
       } else {
         const template = Deno.env.get("WHATSAPP_ONLINE_STATUS_TEMPLATE");

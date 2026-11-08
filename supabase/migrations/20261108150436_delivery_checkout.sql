@@ -237,7 +237,7 @@ create function app_private.online_receipt(p_order uuid) returns jsonb language 
  select jsonb_build_object('number',o.number,'revision',o.revision,'created_at',o.created_at,'fulfillment',o.fulfillment,
  'items',o.items,'subtotal_cents',o.subtotal_cents,'delivery_fee_cents',o.delivery_fee_cents,'card_fee_cents',o.card_fee_cents,
  'total_cents',o.total_cents,'paid_cents',o.paid_cents,'due_cents',greatest(0,o.total_cents-o.paid_cents),
- 'payment_method',o.payment_method,'bring_card_terminal',o.payment_method='card_delivery','cash_change_for_cents',o.cash_change_for_cents,
+ 'payment_method',o.payment_method,'bring_card_terminal',o.payment_method='card_delivery' and o.paid_cents<o.total_cents,'cash_change_for_cents',o.cash_change_for_cents,
  'contact',jsonb_build_object('name',c.name,'phone',c.phone,'address',c.address,'reference',c.reference),
  'change_note',(select reason from public.online_changes where order_id=o.id and status='accepted' order by reviewed_at desc limit 1))
  from public.online_orders o join app_private.online_contacts c on c.order_id=o.id where o.id=p_order
@@ -299,9 +299,9 @@ begin
  update app_private.online_print_jobs set status='uncertain',last_error='agent_disconnected' where status='spooling' and lease_until<now();
  select p.* into j from app_private.online_print_jobs p join public.online_orders o on o.id=p.order_id
  where p.status='pending' and p.revision=o.revision and o.status in ('accepted','preparing','ready','dispatched','completed')
- order by p.created_at,p.id for update of p skip locked limit 1;
+ order by p.created_at,p.id for update of p,o skip locked limit 1;
  if not found then return null;end if;
- update app_private.online_print_jobs set status='spooling',bridge_id=bridge,claim_token=gen_random_uuid(),lease_until=now()+interval '3 minutes',attempts=attempts+1 where id=j.id returning * into j;
+ update app_private.online_print_jobs set payload=app_private.online_receipt(j.order_id)||jsonb_build_object('reprint',coalesce((j.payload->>'reprint')::boolean,false)),status='spooling',bridge_id=bridge,claim_token=gen_random_uuid(),lease_until=now()+interval '3 minutes',attempts=attempts+1 where id=j.id returning * into j;
  return jsonb_build_object('id',j.id,'claim',j.claim_token,'payload',j.payload);
 end $$;
 create function public.online_print_finish(p_token text,p_id uuid,p_claim uuid,p_success boolean) returns void language plpgsql security definer set search_path='' as $$

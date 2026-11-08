@@ -59,6 +59,7 @@ select set_config('request.jwt.claims','{"role":"service_role"}',true);
 select pg_temp.assert((public.online_order_status(repeat('4',64))->>'paid_cents')::int=1166,'conferencia idempotente recebe total com taxa uma vez');
 select pg_temp.assert(public.online_order_status(repeat('4',64))->>'status'='completed','cliente acompanha conclusao real');
 select set_config('test.print_job',public.online_print_claim(current_setting('test.print_token'))::text,true);
+select pg_temp.assert(current_setting('test.print_job')::jsonb#>>'{payload,due_cents}'='0' and current_setting('test.print_job')::jsonb#>>'{payload,bring_card_terminal}'='false','cupom enfileirado atualiza pagamento antes de imprimir e nao cobra duas vezes');
 select public.online_print_finish(current_setting('test.print_token'),(current_setting('test.print_job')::jsonb->>'id')::uuid,(current_setting('test.print_job')::jsonb->>'claim')::uuid,true);
 select public.online_print_finish(current_setting('test.print_token'),(current_setting('test.print_job')::jsonb->>'id')::uuid,(current_setting('test.print_job')::jsonb->>'claim')::uuid,true);
 select pg_temp.assert(public.online_print_claim(current_setting('test.print_token')) is null,'ack repetido nao reimprime');

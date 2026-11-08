@@ -65,7 +65,14 @@ async function api(body) {
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(20000),
   });
-  if (!response.ok) throw new Error("PRINT_SERVER_UNAVAILABLE");
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(
+      result.error === "PRINT_CLAIM_SUPERSEDED"
+        ? result.error
+        : "PRINT_SERVER_UNAVAILABLE",
+    );
+  }
   return response.json();
 }
 async function recover() {
@@ -78,12 +85,19 @@ async function recover() {
   if (!state) return;
   // Crash after Print() or loss of acknowledgement never automatically prints
   // again. A started journal is explicitly reported as uncertain.
-  await api({
-    action: "finish",
-    id: state.id,
-    claim: state.claim,
-    success: state.state === "submitted",
-  });
+  try {
+    await api({
+      action: "finish",
+      id: state.id,
+      claim: state.claim,
+      success: state.state === "submitted",
+    });
+  } catch (error) {
+    if (error.message !== "PRINT_CLAIM_SUPERSEDED") throw error;
+    console.log(
+      "Tentativa substituida no painel. Diario encerrado sem repetir o cupom antigo.",
+    );
+  }
   await unlink(journal);
 }
 console.log(

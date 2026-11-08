@@ -33,7 +33,11 @@ Deno.serve(async (req: Request) => {
     return response(
       {
         error:
-          code === "access_denied" ? "ACCESS_DENIED" : "PRINT_REQUEST_FAILED",
+          code === "access_denied"
+            ? "ACCESS_DENIED"
+            : ["print_claim_mismatch", "print_claim_expired"].includes(code)
+              ? "PRINT_CLAIM_SUPERSEDED"
+              : "PRINT_REQUEST_FAILED",
       },
       code === "access_denied" ? 401 : 409,
     );

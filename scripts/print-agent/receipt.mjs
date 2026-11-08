@@ -48,7 +48,9 @@ export function receiptText(order, columns = 42) {
   );
   if (order.payment_method === "card_delivery")
     lines.push(
-      "*** LEVAR MAQUINETA ***",
+      order.due_cents > 0
+        ? "*** LEVAR MAQUINETA ***"
+        : "CARTAO RECEBIDO NA MAQUINETA",
       "CARTAO NA ENTREGA: CREDITO OU DEBITO",
       "6% JA INCLUIDOS NO TOTAL",
     );

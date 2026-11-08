@@ -5,7 +5,7 @@
 No checkout, a entrega oferece Pix, dinheiro e cartão na entrega (crédito ou débito). O cartão online existente continua separado. A maquineta física não usa a integração de cartão online.
 
 - **Cartão na entrega:** 6% sobre produtos + taxa de entrega, arredondados uma única vez para centavos. Exemplo: R$ 30,00 de produtos + R$ 5,00 de entrega = base de R$ 35,00; acréscimo R$ 2,10; total R$ 37,10. O servidor calcula o preço; valores do navegador não substituem o preço do catálogo. O resumo mostra o acréscimo antes da confirmação.
-- **Pix:** código no acompanhamento e envio pela fila oficial do WhatsApp quando autorizado. É necessário configurar Pix/provedor, Meta e o worker. O código não representa recebimento confirmado.
+- **Pix:** código no acompanhamento e envio da chave estática (quando presente no código) e do Pix copia e cola pela fila oficial do WhatsApp quando autorizado. É necessário configurar Pix/provedor, Meta e o worker. O código não representa recebimento confirmado.
 - **Dinheiro:** o cliente informa se precisa de troco e para qual valor. O valor precisa cobrir o total. Troco não é receita.
 - **Entrega:** nome, WhatsApp, endereço completo e ponto de referência obrigatórios. E-mail é obrigatório para o provedor eletrônico; cartão presencial e dinheiro permitem e-mail opcional.
 
@@ -21,7 +21,7 @@ Após enviar, o cliente abre `/pedido#acompanhar=<segredo individual>` e pode co
 
 O link também acompanha os avisos de status no WhatsApp. Novos pedidos guardam o segredo apenas em tabela privada para o worker montar esse link; o hash permanece no pedido público. Contatos não são devolvidos pela consulta de acompanhamento. Quem recebe o link pode acompanhar e solicitar uma alteração dentro das regras; compartilhe somente com quem deve ter esse acesso.
 
-Fora da janela de atendimento, os avisos dependem de modelos Meta aprovados. `WHATSAPP_ONLINE_STATUS_TEMPLATE` mantém dois parâmetros (número e status com link). `WHATSAPP_ONLINE_PAYMENT_TEMPLATE` mantém três parâmetros (número, valor e Pix copia e cola). O aviso de recebimento/status traz o link; o aviso Pix é separado e traz a cobrança. Sem consentimento, não há envio WhatsApp; o site continua funcionando.
+Fora da janela de atendimento, os avisos dependem de modelos Meta aprovados. `WHATSAPP_ONLINE_STATUS_TEMPLATE` mantém dois parâmetros (número e status com link). `WHATSAPP_ONLINE_PAYMENT_TEMPLATE` mantém três parâmetros (número, valor e Pix copia e cola, com chave estática quando disponível). O aviso de recebimento/status traz o link; o aviso Pix é separado e traz a cobrança. Sem consentimento, não há envio WhatsApp; o site continua funcionando.
 
 ## Implantação incremental
 
@@ -41,7 +41,7 @@ A impressora ainda será escolhida. A implementação usa o **driver instalado n
 4. Executar `node scripts/print-agent/agent.mjs`. Nenhuma instalação npm é necessária para o agente. Mantê-lo aberto e o computador ligado. Para iniciar no login do Windows, criar uma tarefa no Agendador com o mesmo usuário e o caminho absoluto de `node.exe` + `agent.mjs`; não executar simultaneamente duas instâncias.
 5. Confirmar no painel a última conexão, depois enviar um pedido controlado. Verificar no papel número/revisão, itens, personalizações, total, pagamento pendente, endereço, referência e WhatsApp. Cartão deve destacar **LEVAR MAQUINETA** e os 6%; dinheiro deve destacar o troco.
 
-O agente consulta a cada 5 segundos. A fila suporta reconexão e não duplica pela repetição da criação do pedido. A confirmação **“Enviado ao Windows”** comprova a submissão ao spooler, não a saída física do papel. Falha, encerramento inesperado ou perda de confirmação deixam o job para conferência; não há repetição automática ambígua. Depois de verificar a impressora, o admin pode solicitar segunda via com justificativa e confirmação explícita. A via fica identificada como segunda via. Se houve encerramento inesperado, verificar que não há outro processo do agente rodando antes de remover `%LOCALAPPDATA%\PlanetaLanchesPrint\agent.lock`.
+O agente consulta a cada 5 segundos. A fila suporta reconexão e não duplica pela repetição da criação do pedido. O cupom usa o saldo atualizado quando sai da fila, evitando cobrar novamente um pagamento confirmado antes da impressão. A confirmação **“Enviado ao Windows”** comprova a submissão ao spooler, não a saída física do papel. Falha, encerramento inesperado ou perda de confirmação deixam o job para conferência; não há repetição automática ambígua. Depois de verificar a impressora, o admin pode solicitar segunda via com justificativa e confirmação explícita. A via fica identificada como segunda via. Se houve encerramento inesperado, verificar que não há outro processo do agente rodando antes de remover `%LOCALAPPDATA%\PlanetaLanchesPrint\agent.lock`.
 
 Revogar a credencial no admin se o computador for perdido/trocado. Não copiar a configuração para computadores de clientes. Logs do agente não incluem token, telefone, endereço nem conteúdo do pedido. O arquivo temporário de cupom é removido após a tentativa; o diário local conserva apenas identificadores de controle.
 
