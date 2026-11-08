@@ -90,7 +90,14 @@ function Settings({ refresh }) {
                 />
                 Aceitar dinheiro
               </label>
-              <label className="online-check"><input type="checkbox" name="delivery_card" defaultChecked={settings.delivery_card_enabled} />Cartão na entrega com acréscimo de 6% (crédito e débito)</label>
+              <label className="online-check">
+                <input
+                  type="checkbox"
+                  name="delivery_card"
+                  defaultChecked={settings.delivery_card_enabled}
+                />
+                Cartão na entrega com acréscimo de 6% (crédito e débito)
+              </label>
             </div>
             <div>
               <label>
@@ -166,16 +173,21 @@ function Order({ order: o, admin, user, run, busy }) {
           ? "Dinheiro"
           : o.payment_method === "card_delivery"
             ? "Cartão na entrega — LEVAR MAQUINETA"
-          : o.payment_method === "card"
-            ? "Cartão online"
-            : "Pix"}
+            : o.payment_method === "card"
+              ? "Cartão online"
+              : "Pix"}
       </p>
-      {o.card_fee_cents > 0 && <p className="online-notice">Acréscimo de 6% no cartão já incluído: {money(o.card_fee_cents)}. Levar maquineta.</p>}
+      {o.card_fee_cents > 0 && (
+        <p className="online-notice">
+          Acréscimo de 6% no cartão já incluído: {money(o.card_fee_cents)}.
+          Levar maquineta.
+        </p>
+      )}
       {o.cash_change_for_cents && (
         <p className="online-notice">
           Troco solicitado para {money(o.cash_change_for_cents)}.{" "}
-          {o.cash_change_for_cents >= o.due_cents
-            ? `Troco previsto: ${money(o.cash_change_for_cents - o.due_cents)}.`
+          {o.cash_change_for_cents >= (o.due_cents || o.total_cents)
+            ? `Troco previsto: ${money(o.cash_change_for_cents - (o.due_cents || o.total_cents))}.`
             : "O total mudou: confirme um novo valor com o cliente."}
         </p>
       )}
@@ -191,7 +203,9 @@ function Order({ order: o, admin, user, run, busy }) {
             {o.contact.phone}
           </a>
           <br />
-          {o.contact.address}<br />{o.contact.reference && `Referência: ${o.contact.reference}`}
+          {o.contact.address}
+          <br />
+          {o.contact.reference && `Referência: ${o.contact.reference}`}
         </address>
       ) : (
         <p>
@@ -269,7 +283,53 @@ function Order({ order: o, admin, user, run, busy }) {
             </form>
           </details>
         )}
-      {mine && o.payment_method === "card_delivery" && o.due_cents > 0 && <details><summary>Registrar cartão recebido na maquineta</summary><form onSubmit={(e) => { e.preventDefault(); run("online_collect_delivery_card", { p_order: o.id, p_reference: bank, p_reason: reason }, true); }}><p>Valor a conferir: {money(o.due_cents)}. Registre somente depois da aprovação na maquineta.</p><label>NSU/identificador único da transação<input required minLength={8} maxLength={100} value={bank} onChange={(e) => setBank(e.target.value)} /></label><label>Justificativa da conferência<input required minLength={5} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label><label className="online-check"><input required type="checkbox" />Conferi a transação aprovada e o valor na maquineta.</label><button className="primary" disabled={busy}>Registrar cartão efetivamente recebido</button></form></details>}
+      {mine && o.payment_method === "card_delivery" && o.due_cents > 0 && (
+        <details>
+          <summary>Registrar cartão recebido na maquineta</summary>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(
+                "online_collect_delivery_card",
+                { p_order: o.id, p_reference: bank, p_reason: reason },
+                true,
+              );
+            }}
+          >
+            <p>
+              Valor a conferir: {money(o.due_cents)}. Registre somente depois da
+              aprovação na maquineta.
+            </p>
+            <label>
+              NSU/identificador único da transação
+              <input
+                required
+                minLength={8}
+                maxLength={100}
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
+              />
+            </label>
+            <label>
+              Justificativa da conferência
+              <input
+                required
+                minLength={5}
+                maxLength={500}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+            <label className="online-check">
+              <input required type="checkbox" />
+              Conferi a transação aprovada e o valor na maquineta.
+            </label>
+            <button className="primary" disabled={busy}>
+              Registrar cartão efetivamente recebido
+            </button>
+          </form>
+        </details>
+      )}
       {mine && ["ready", "dispatched"].includes(o.status) && (
         <div className="online-actions">
           {o.status === "ready" && o.fulfillment === "delivery" && (

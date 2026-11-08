@@ -9,7 +9,7 @@ update public.profiles set role='admin',active=true where id='e0000000-0000-0000
 update public.profiles set role='cashier',active=true where id='e0000000-0000-0000-0000-000000000002';
 insert into public.terminals(id,name) values('e1000000-0000-0000-0000-000000000001','Terminal entrega teste');
 insert into app_private.terminal_leases(user_id,session_id,expires_at,terminal_id) values('e0000000-0000-0000-0000-000000000002','delivery-test',now()+interval '10 minutes','e1000000-0000-0000-0000-000000000001');
-insert into public.products(id,name,category,price_cents,sector) values('test-delivery-burger','Burger entrega','hamburgueres',1000,'grill');
+insert into public.products(id,name,category,price_cents,sector,image_path) values('test-delivery-burger','Burger entrega','hamburgueres',1000,'grill','/menu/hamburgueres.svg');
 insert into public.ingredients(id,name,unit,stock,unit_cost_cents) values('e2000000-0000-0000-0000-000000000001','Insumo entrega','un',100,100);
 insert into public.recipe_items values('test-delivery-burger','e2000000-0000-0000-0000-000000000001',1);
 update public.online_shop_settings set enabled=true,delivery_enabled=true,delivery_fee_cents=100,delivery_card_enabled=true;

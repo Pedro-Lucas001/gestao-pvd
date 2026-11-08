@@ -87,7 +87,10 @@ Deno.serve(async (req: Request) => {
         (body.method === "card" && !methods.card)
       )
         return reply(
-          { code: "payment_unavailable", error: "Esta forma de pagamento ainda não está disponível." },
+          {
+            code: "payment_unavailable",
+            error: "Esta forma de pagamento ainda não está disponível.",
+          },
           409,
         );
       return reply(

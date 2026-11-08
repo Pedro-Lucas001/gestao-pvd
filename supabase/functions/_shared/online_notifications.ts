@@ -46,8 +46,10 @@ export async function sendOnlineNotifications(
         ? (await ensureOnlineIntent(job.payment)).pix
         : null;
       if (job.payment && !pix) throw new Error("PIX_NOT_AVAILABLE");
-      const link = job.tracking && /^[a-f0-9]{64}$/.test(job.tracking)
-        ? `${publicSite()}/pedido#acompanhar=${job.tracking}` : null;
+      const link =
+        job.tracking && /^[a-f0-9]{64}$/.test(job.tracking)
+          ? `${publicSite()}/pedido#acompanhar=${job.tracking}`
+          : null;
       if (job.within_window) {
         await meta.text(
           job.phone,

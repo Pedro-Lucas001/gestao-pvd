@@ -347,4 +347,5 @@ test("cash receipt separates tender and change from revenue", async () => {
   assert.match(receiptText(base), /Levar troco: R\$\s*9,00/);
   assert.match(receiptText({ ...base, cash_change_for_cents: null }), /sem troco/);
   assert.match(receiptText({ ...base, reprint: true }), /SEGUNDA VIA/);
+  assert.match(receiptText({ ...base, due_cents: 0, paid_cents: 1100 }), /Levar troco: R\$\s*9,00/);
 });
