@@ -16,8 +16,9 @@ const labels: Record<string, string> = {
   "order.received": "recebido; acompanhe a confirmação e o pagamento no site",
   "order.paid": "pagamento confirmado; pedido liberado à cozinha",
   "order.cash_accepted":
-    "aceito para preparo; o valor em dinheiro continua pendente até o recebimento",
-  "order.delivery_accepted": "enviado à cozinha; pagamento a receber",
+    "aceito para preparo; consulte o recebimento no acompanhamento",
+  "order.delivery_accepted":
+    "enviado à cozinha; acompanhe as etapas e o pagamento no site",
   "order.payment_requested": "Pix pendente",
   "order.preparing": "em preparo",
   "order.ready": "pronto",
@@ -35,9 +36,12 @@ export async function sendOnlineNotifications(
     let success = false,
       code: string | null = null;
     try {
-      const label = job.topic.startsWith("change.rejected:")
-        ? "solicitação de alteração não aceita; consulte o acompanhamento"
-        : labels[job.topic];
+      const label =
+        job.topic === "order.payment_requested" && job.due_cents <= 0
+          ? "sem saldo pendente; consulte o acompanhamento"
+          : job.topic.startsWith("change.rejected:")
+            ? "solicitação de alteração não aceita; consulte o acompanhamento"
+            : labels[job.topic];
       if (!label) throw new Error("UNKNOWN_ONLINE_NOTIFICATION");
       const amount = (job.due_cents / 100).toLocaleString("pt-BR", {
         style: "currency",
