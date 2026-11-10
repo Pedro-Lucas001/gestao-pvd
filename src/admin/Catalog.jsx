@@ -11,6 +11,7 @@ import {
   productImageUrl,
 } from "../lib/productImages";
 import "./AdminControl.css";
+import CoxinhaAvailability from "./CoxinhaAvailability";
 function Photo({ path, name }) {
   return (
     <img
@@ -28,6 +29,7 @@ export function ProductEditor({
   error,
   allowUpload = true,
 }) {
+  const [category, setCategory] = useState(product.category || "hamburgueres");
   const [image, setImage] = useState(product.image_path || ""),
     [uploading, setUploading] = useState(false),
     [photoError, setPhotoError] = useState("");
@@ -116,7 +118,8 @@ export function ProductEditor({
           Categoria
           <select
             name="category"
-            defaultValue={product.category || "hamburgueres"}
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
           >
             {categories
               .filter(([id]) => id !== "all")
@@ -170,14 +173,33 @@ export function ProductEditor({
             {uploading && <p role="status">Preparando e enviando foto…</p>}
           </div>
         </div>
-        <label className="span-all">
-          Personalizações permitidas · uma por linha
-          <textarea
-            name="modifiers"
-            maxLength={1700}
-            defaultValue={product.allowed_modifiers?.join("\n") || ""}
-          />
-        </label>
+        {["coxinhas", "pasteis"].includes(category) ? (
+          <p className="span-all">
+            {category === "coxinhas"
+              ? "Os sabores são definidos em Mini coxinhas: sabores disponíveis hoje, para todas as porções."
+              : "O cliente escolhe tomate, milho, batata palha, ketchup e maionese no pedido."}
+          </p>
+        ) : (
+          <label className="span-all">
+            Personalizações permitidas · uma por linha
+            <textarea
+              name="modifiers"
+              maxLength={1700}
+              defaultValue={
+                product.allowed_modifiers
+                  ?.filter((m) => !m.startsWith("Ponto:"))
+                  .join("\n") || ""
+              }
+            />
+          </label>
+        )}
+        {["hamburgueres", "dogoes"].includes(category) && (
+          <p className="span-all">
+            Carnes industrializadas; sem seleção de ponto. Os adicionais são
+            produtos da categoria Adicionais e aparecem dentro do lanche no
+            cardápio.
+          </p>
+        )}
         <label className="checkbox">
           <input
             type="checkbox"
@@ -260,6 +282,7 @@ export default function Catalog() {
         Depois, configure a ficha técnica em Estoque e fichas para controlar
         consumo e custos.
       </p>
+      <CoxinhaAvailability />
       <div className="catalog-toolbar">
         <button
           className="primary"

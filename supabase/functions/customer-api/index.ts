@@ -19,6 +19,14 @@ const messages: Record<string, string> = {
   change_not_allowed:
     "O pedido não pode ser alterado nesta etapa ou tem uma cobrança em aberto. Fale com a equipe.",
   product_unavailable: "Um produto ficou indisponível. Confira o carrinho.",
+  flavor_required: "Escolha um sabor para cada porção de mini coxinhas.",
+  flavor_unavailable:
+    "Os sabores das mini coxinhas mudaram. Atualize o cardápio e escolha uma opção disponível.",
+  invalid_addons: "Confira os adicionais selecionados para cada lanche.",
+  addon_unavailable:
+    "Um adicional ficou indisponível. Retire-o ou escolha outro.",
+  addon_requires_sandwich:
+    "Adicionais devem ser escolhidos dentro de um hambúrguer ou dog na chapa.",
   invalid_modifier: "Uma personalização não está disponível para esse item.",
   idempotency_conflict:
     "Esta tentativa já foi usada com outros dados. Consulte seu pedido antes de tentar novamente.",

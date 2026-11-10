@@ -1,6 +1,7 @@
 import { onlineRpc, publicSite } from "./online.ts";
 export type AssistantProduct = {
   product_id: string;
+  category?: string;
   name: string;
   description: string;
   price_cents: number;
@@ -202,7 +203,9 @@ export async function customerAssistant(
         {
           role: "user",
           content: JSON.stringify({
-            catalog: catalog.products,
+            catalog: catalog.products.filter(
+              (p) => p.category !== "adicionais",
+            ),
             history: history
               .slice(-6)
               .filter((m) => ["user", "assistant"].includes(m.role))
@@ -234,7 +237,10 @@ export async function customerAssistant(
     (c: { type: string; text?: string }) => c.type === "output_text",
   )?.text;
   if (typeof text !== "string") throw new Error("AI_UNAVAILABLE");
-  return renderAssistantResult(JSON.parse(text), catalog.products);
+  return renderAssistantResult(
+    JSON.parse(text),
+    catalog.products.filter((p) => p.category !== "adicionais"),
+  );
 }
 export function assistantOrderLink(items: SuggestedItem[]): string {
   const link = `${publicSite()}/pedido#sugestao=${encodeURIComponent(JSON.stringify(items))}`;

@@ -39,5 +39,8 @@ export async function customerApi(
     error.code = data.code;
     throw error;
   }
+  if (action === "quote" && body.items?.some((item) => item.addons?.length) && data.options_version !== 2) {
+    throw new Error("Os adicionais estão aguardando a atualização do cardápio. Aguarde a loja concluir a ativação antes de confirmar.");
+  }
   return data;
 }

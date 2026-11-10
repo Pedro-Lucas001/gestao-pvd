@@ -402,3 +402,10 @@
   margin: 0;
   min-width: 0;
 }
+
+.coxinha-availability { margin: 22px 0; }
+.coxinha-availability fieldset { border: 0; padding: 0; display: grid; gap: 16px; }
+.coxinha-flavor-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.coxinha-flavor-row > label:not(.checkbox) { flex: 1; min-width: 180px; }
+.coxinha-flavor-row .checkbox { display: flex; align-items: center; gap: 8px; }
+.coxinha-flavor-row .checkbox input { width: auto; }

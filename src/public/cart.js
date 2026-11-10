@@ -7,6 +7,7 @@ export function cartPayload(items) {
     quantity: i.quantity,
     modifiers: [...(i.modifiers || [])],
     notes: i.notes || "",
+    ...(i.addons?.length ? { addons: [...i.addons] } : {}),
   }));
 }
 export function trackingToken() {
@@ -29,8 +30,12 @@ export function draftLine(product, quantity = 1) {
     name: product.name,
     price_cents: product.price_cents ?? product.unit_price_cents,
     quantity,
-    modifiers: [...(product.modifiers || [])],
+    modifiers: [...(product.modifiers || [])].filter(
+      (m) => m !== "Sem acompanhamentos",
+    ),
     notes: product.notes || "",
+    addons: [...(product.addons || [])],
+    addon_prices: [...(product.addon_prices || [])],
   };
 }
 export function patchCart(items, lineId, patch) {
@@ -40,4 +45,29 @@ export function patchCart(items, lineId, patch) {
       (i) =>
         Number.isInteger(i.quantity) && i.quantity > 0 && i.quantity <= 100,
     );
+}
+
+// Rebuild the editable parent lines from the canonical order snapshot. Extra
+// prices remain server snapshots; the next submission sends only their IDs.
+export function orderDraft(items) {
+  const parents = new Map(),
+    result = [];
+  items.forEach((item, index) => {
+    if (item.parent_line) {
+      const parent = parents.get(item.parent_line);
+      if (parent) {
+        parent.addons.push(item.product_id);
+        parent.addon_prices.push({
+          product_id: item.product_id,
+          name: item.name,
+          price_cents: item.unit_price_cents,
+        });
+      }
+    } else {
+      const line = draftLine(item, item.quantity);
+      parents.set(index + 1, line);
+      result.push(line);
+    }
+  });
+  return result;
 }

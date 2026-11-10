@@ -2,7 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 import { oneRecord } from "./operations";
 import { reportError } from "./monitoring";
 import { fetchWithTimeout } from "./network";
-import { configured, supabaseUrl as url, supabasePublicKey as key } from "./supabaseConfig";
+import {
+  configured,
+  supabaseUrl as url,
+  supabasePublicKey as key,
+} from "./supabaseConfig";
 export { configured };
 export const supabase = configured
   ? createClient(url, key, {
@@ -49,7 +53,8 @@ export async function rpc(name, args) {
 }
 export function friendlyError(message = "") {
   const errors = {
-    staff_pin_in_use: "Este PIN já está em uso por outro funcionário ativo. Escolha quatro dígitos diferentes.",
+    staff_pin_in_use:
+      "Este PIN já está em uso por outro funcionário ativo. Escolha quatro dígitos diferentes.",
     justification_required:
       "Informe uma justificativa entre 5 e 500 caracteres.",
     insufficient_cash:
@@ -76,6 +81,10 @@ export function friendlyError(message = "") {
     payment_reconciliation_required:
       "Este pedido exige conciliação do pagamento antes de cancelar.",
     product_unavailable: "Um produto ficou indisponível. Atualize o cardápio.",
+    flavor_required: "Escolha um sabor para as mini coxinhas.",
+    flavor_unavailable: "Mini coxinhas sem sabores disponíveis hoje.",
+    invalid_flavors:
+      "Informe até seis sabores diferentes, com nomes entre 2 e 50 caracteres.",
     invalid_modifier: "Uma observação não é permitida para este produto.",
     shift_unavailable: "Caixa indisponível ou já fechado.",
   };
