@@ -16,6 +16,7 @@ import {
   useCart,
   cartPayload,
   draftLine,
+  orderDraft,
   trackingToken,
   operationKey,
 } from "./cart";
@@ -217,11 +218,7 @@ function Payment({ order, tracking }) {
   );
 }
 function ChangeRequest({ order, tracking, catalog, onDone }) {
-  const [items, setItems] = useState(() =>
-    order.items.map((i) =>
-      draftLine({ ...i, price_cents: i.unit_price_cents }, i.quantity),
-    ),
-  );
+  const [items, setItems] = useState(() => orderDraft(order.items));
   const [reason, setReason] = useState(""),
     [quote, setQuote] = useState(null),
     [busy, setBusy] = useState(false),
@@ -740,6 +737,11 @@ export default function CustomerOrder() {
           "invalid_contact",
           "product_unavailable",
           "invalid_modifier",
+          "flavor_required",
+          "flavor_unavailable",
+          "invalid_addons",
+          "addon_unavailable",
+          "addon_requires_sandwich",
           "delivery_unavailable",
           "shop_closed",
         ].includes(e.code),

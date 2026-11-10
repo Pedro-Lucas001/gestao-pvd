@@ -1,6 +1,8 @@
 import { Plus, Minus, Trash2 } from "lucide-react";
-import { money, toggleModifier } from "../lib/operations";
+import { money } from "../lib/operations";
 import { draftLine, patchCart } from "./cart";
+import { cartUnitPrice } from "./menuOptions";
+import ProductOptions from "./ProductOptions";
 export default function CartEditor({
   items,
   setItems,
@@ -19,9 +21,7 @@ export default function CartEditor({
             <div>
               <h3>{item.name}</h3>
               <strong>
-                {money(
-                  (product?.price_cents ?? item.price_cents) * item.quantity,
-                )}
+                {money(cartUnitPrice(item, catalog) * item.quantity)}
               </strong>
             </div>
             <div className="quantity-controls">
@@ -61,27 +61,15 @@ export default function CartEditor({
                 <Trash2 size={16} />
               </button>
             </div>
-            {(product?.allowed_modifiers || []).length > 0 && (
-              <div className="customer-modifiers">
-                {product.allowed_modifiers.map((modifier) => (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    key={modifier}
-                    aria-pressed={item.modifiers.includes(modifier)}
-                    onClick={() =>
-                      setItems((p) =>
-                        patchCart(p, item.line_id, {
-                          modifiers: toggleModifier(item.modifiers, modifier),
-                        }),
-                      )
-                    }
-                  >
-                    {modifier}
-                  </button>
-                ))}
-              </div>
-            )}
+            <ProductOptions
+              product={product}
+              line={item}
+              catalog={catalog}
+              disabled={disabled}
+              onChange={(patch) =>
+                setItems((p) => patchCart(p, item.line_id, patch))
+              }
+            />
             <label>
               Observações de {item.name}
               <textarea
@@ -113,11 +101,13 @@ export default function CartEditor({
             }}
           >
             <option value="">Selecione uma opção</option>
-            {catalog.map((p) => (
-              <option key={p.product_id} value={p.product_id}>
-                {p.name} · {money(p.price_cents)}
-              </option>
-            ))}
+            {catalog
+              .filter((p) => p.category !== "adicionais")
+              .map((p) => (
+                <option key={p.product_id} value={p.product_id}>
+                  {p.name} · {money(p.price_cents)}
+                </option>
+              ))}
           </select>
         </label>
       )}

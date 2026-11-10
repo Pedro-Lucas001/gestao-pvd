@@ -719,3 +719,19 @@
 .customer-progress p, .customer-history { color: #b7b7bd; font-size: .88rem; line-height: 1.7; }
 .customer-history { padding-left: 1.3rem; }
 @media (max-width: 600px) { .customer-milestones { flex-direction: column; } .customer-milestones li { flex-basis: auto; } }
+
+.customer-customizer { width: min(620px, calc(100vw - 24px)); max-height: 90dvh; border: 1px solid #46403b; border-radius: 20px; color: #f6f3ee; background: #171718; padding: 24px; }
+.customer-customizer::backdrop { background: rgb(0 0 0 / .75); }
+.customer-customizer header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.customer-customizer h2 { margin-top: 6px; }
+.customer-customizer form > label { display: grid; gap: 7px; margin: 15px 0; }
+.customer-customizer input[type="number"], .customer-customizer textarea { width: 100%; padding: 12px; border: 1px solid #55483d; border-radius: 10px; background: #242224; color: #fff; }
+.customer-customizer > form > p { color: #bdb8b2; line-height: 1.6; }
+.customer-product-options { margin: 16px 0; }
+.customer-option-group { border: 1px solid #51443a; border-radius: 12px; margin: 14px 0; padding: 14px; }
+.customer-option-group legend { padding: 0 7px; font-weight: 700; }
+.customer-option-group > p { color: #c4bdb6; font-size: .86rem; }
+.customer-option-group .customer-checkbox { display: flex; gap: 10px; align-items: center; padding: 9px 0; cursor: pointer; }
+.customer-option-group .customer-checkbox input { accent-color: #ff994b; width: 18px; height: 18px; flex-shrink: 0; }
+.customer-option-group .customer-checkbox strong { margin-left: auto; white-space: nowrap; font-size: .88rem; }
+.customer-meat-note { color: #ffc382; font-size: .88rem; line-height: 1.5; }

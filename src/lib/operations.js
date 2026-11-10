@@ -19,7 +19,9 @@ export function toggleModifier(current, value) {
   if (current.includes(value)) return current.filter((x) => x !== value);
   return [
     ...current.filter(
-      (x) => !value.startsWith("Ponto:") || !x.startsWith("Ponto:"),
+      (x) =>
+        !(value.startsWith("Ponto:") && x.startsWith("Ponto:")) &&
+        !(value.startsWith("Sabor:") && x.startsWith("Sabor:")),
     ),
     value,
   ];

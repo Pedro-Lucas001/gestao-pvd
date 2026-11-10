@@ -351,3 +351,21 @@ test("cash receipt separates tender and change from revenue", async () => {
   assert.match(receiptText({ ...base, reprint: true }), /SEGUNDA VIA/);
   assert.match(receiptText({ ...base, due_cents: 0, paid_cents: 1100 }), /Levar troco: R\$\s*9,00/);
 });
+
+test("sandwich extras stay attached, use catalog prices and survive order editing", async () => {
+  const { cartPayload, orderDraft } = await import("../src/public/cart.js");
+  const { cartSubtotal } = await import("../src/public/menuOptions.js");
+  const line = { product_id: "burger", quantity: 2, price_cents: 1, modifiers: [], notes: "", addons: ["extra-bacon"], addon_prices: [{ product_id: "extra-bacon", name: "Bacon", price_cents: 1 }] };
+  assert.equal(cartSubtotal([line], [{ product_id: "burger", price_cents: 1000 }, { product_id: "extra-bacon", price_cents: 300 }]), 2600);
+  assert.deepEqual(cartPayload([line]), [{ product_id: "burger", quantity: 2, modifiers: [], notes: "", addons: ["extra-bacon"] }]);
+  const rebuilt = orderDraft([{ product_id: "burger", name: "Burger", quantity: 2, unit_price_cents: 1000, modifiers: [], notes: "" }, { product_id: "extra-bacon", name: "Bacon", parent_line: 1, quantity: 2, unit_price_cents: 300, modifiers: [], notes: "Adicional de Burger" }]);
+  assert.equal(rebuilt.length, 1);
+  assert.deepEqual(rebuilt[0].addons, ["extra-bacon"]);
+  assert.equal(cartSubtotal(rebuilt), 2600);
+});
+
+test("flavor choices are exclusive and meat temperatures are absent from customer options", async () => {
+  const { visibleModifiers } = await import("../src/public/menuOptions.js");
+  assert.deepEqual(toggleModifier(["Sabor: Frango"], "Sabor: Mistas"), ["Sabor: Mistas"]);
+  assert.deepEqual(visibleModifiers({ allowed_modifiers: ["Sem cebola", "Ponto: ao ponto", "Sem acompanhamentos"] }), ["Sem cebola"]);
+});

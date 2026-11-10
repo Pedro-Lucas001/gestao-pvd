@@ -38,16 +38,19 @@ export default function CartProvider({ children }) {
       const identical = previous.find(
         (i) =>
           i.product_id === (product.product_id || product.id) &&
-          !i.modifiers.length &&
-          !i.notes &&
-          i.quantity < 100,
+          JSON.stringify([...i.modifiers].sort()) ===
+            JSON.stringify([...(product.modifiers || [])].sort()) &&
+          JSON.stringify([...(i.addons || [])].sort()) ===
+            JSON.stringify([...(product.addons || [])].sort()) &&
+          i.notes === (product.notes || "") &&
+          i.quantity + (product.quantity || 1) <= 100,
       );
       if (identical)
         return patchCart(previous, identical.line_id, {
-          quantity: identical.quantity + 1,
+          quantity: identical.quantity + (product.quantity || 1),
         });
       return previous.length < 30
-        ? [...previous, draftLine(product)]
+        ? [...previous, draftLine(product, product.quantity || 1)]
         : previous;
     });
   }

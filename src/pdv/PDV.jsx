@@ -27,9 +27,6 @@ const previewProducts = sourceMenu.map((p) => ({
       "Sem tomate",
       "Sem alface",
       "Sem molhos",
-      "Ponto: mal passado",
-      "Ponto: ao ponto",
-      "Ponto: bem passado",
     ]
     : p.category === "dogoes"
     ? ["Sem cebola", "Sem molhos"]

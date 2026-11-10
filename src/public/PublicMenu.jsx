@@ -23,6 +23,8 @@ import "./CustomerOrder.css";
 import { useCart } from "./cart";
 import { customerApi } from "./customerApi";
 import CustomerChat from "./CustomerChat";
+import ProductCustomizer from "./ProductCustomizer";
+import { cartSubtotal, industrialMeatNotice } from "./menuOptions";
 
 const referenceMenu = publicProducts(
   sourceMenu.map((p) => ({
@@ -75,6 +77,7 @@ function MenuItem({ product, onAdd }) {
 export default function PublicMenu() {
   const { items, add } = useCart();
   const [shop, setShop] = useState(null);
+  const [selected, setSelected] = useState(null);
   useEffect(() => {
     const c = new AbortController();
     customerApi("config", {}, c.signal)
@@ -95,7 +98,9 @@ export default function PublicMenu() {
     try {
       const data = await loadPublicMenu(signal);
       if (signal.aborted) return;
-      setProducts(data);
+      setProducts(data.filter((p) => p.category !== "adicionais"));
+      const settings = await customerApi("config", {}, signal);
+      if (!signal.aborted) setShop(settings);
       setError("");
     } catch {
       if (!signal.aborted)
@@ -123,12 +128,23 @@ export default function PublicMenu() {
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [load]);
-  const filtered = filterMenu(products, category, query);
+  const mainProducts = products.filter((p) => p.category !== "adicionais");
+  const filtered = filterMenu(mainProducts, category, query);
+  function selectProduct(product) {
+    const current = shop?.catalog?.find((p) => p.product_id === product.id);
+    if (!current) {
+      setError(
+        "Aguarde a atualização das opções do produto e tente novamente.",
+      );
+      return;
+    }
+    setSelected(current);
+  }
   const availableCategories = [
     ...categories.filter(
-      ([id]) => id === "all" || products.some((p) => p.category === id),
+      ([id]) => id === "all" || mainProducts.some((p) => p.category === id),
     ),
-    ...[...new Set(products.map((p) => p.category))]
+    ...[...new Set(mainProducts.map((p) => p.category))]
       .filter((id) => !categories.some(([known]) => id === known))
       .map((id) => [id, id]),
   ];
@@ -287,11 +303,20 @@ export default function PublicMenu() {
                         opções
                       </span>
                     </div>
+                    {["hamburgueres", "dogoes"].includes(id) && (
+                      <p className="customer-meat-note">
+                        {industrialMeatNotice}
+                      </p>
+                    )}
                     <div className="menu-products">
                       {filtered
                         .filter((p) => p.category === id)
                         .map((p) => (
-                          <MenuItem key={p.id} product={p} onAdd={add} />
+                          <MenuItem
+                            key={p.id}
+                            product={p}
+                            onAdd={selectProduct}
+                          />
                         ))}
                     </div>
                   </section>
@@ -352,7 +377,7 @@ export default function PublicMenu() {
             <strong>{items.reduce((n, i) => n + i.quantity, 0)} itens</strong>
             <small>
               Subtotal estimado{" "}
-              {money(items.reduce((n, i) => n + i.price_cents * i.quantity, 0))}
+              {money(cartSubtotal(items, shop?.catalog || []))}
             </small>
           </span>
           <Link to="/pedido">
@@ -360,6 +385,16 @@ export default function PublicMenu() {
             <ArrowRight size={18} />
           </Link>
         </div>
+      )}
+      {selected && (
+        <ProductCustomizer
+          key={selected.product_id}
+          product={selected}
+          catalog={shop?.catalog || []}
+          onAdd={add}
+          onClose={() => setSelected(null)}
+          full={items.length >= 30}
+        />
       )}
       <CustomerChat shop={shop} catalog={shop?.catalog || products} />
     </div>

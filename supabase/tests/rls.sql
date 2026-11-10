@@ -53,12 +53,12 @@ do $$begin begin update public.products set price_cents=1 where id='x-tudo';exce
 select pg_temp.assert((select price_cents from public.products where id='x-tudo')=1700,'cashier cannot edit prices');
 select set_config('test.shift',public.open_shift(10000)::text,true);
 select pg_temp.assert(public.open_shift(10000)=current_setting('test.shift')::uuid,'opening shift retry returns same shift');
-select set_config('test.order',(public.create_order('20000000-0000-0000-0000-000000000001','Mesa 4','counter','[{"product_id":"x-tudo","quantity":1,"price_cents":1,"modifiers":["Sem cebola","Ponto: ao ponto"]},{"product_id":"agua","quantity":1}]')).id::text,true);
+select set_config('test.order',(public.create_order('20000000-0000-0000-0000-000000000001','Mesa 4','counter','[{"product_id":"x-tudo","quantity":1,"price_cents":1,"modifiers":["Sem cebola"]},{"product_id":"agua","quantity":1}]')).id::text,true);
 select pg_temp.assert((select total_cents from public.orders where id=current_setting('test.order')::uuid)=1900,'server ignores client supplied prices');
-select pg_temp.assert((public.create_order('20000000-0000-0000-0000-000000000001','Mesa 4','counter','[{"product_id":"x-tudo","quantity":1,"price_cents":1,"modifiers":["Sem cebola","Ponto: ao ponto"]},{"product_id":"agua","quantity":1}]')).id=current_setting('test.order')::uuid,'order retry is idempotent');
+select pg_temp.assert((public.create_order('20000000-0000-0000-0000-000000000001','Mesa 4','counter','[{"product_id":"x-tudo","quantity":1,"price_cents":1,"modifiers":["Sem cebola"]},{"product_id":"agua","quantity":1}]')).id=current_setting('test.order')::uuid,'order retry is idempotent');
 do $$begin
  begin perform public.create_order('20000000-0000-0000-0000-000000000001','Outro','counter','[{"product_id":"x-tudo","quantity":1}]');raise exception 'conflicting order accepted';exception when others then if sqlerrm<>'idempotency_conflict' then raise;end if;end;
- begin perform public.create_order(gen_random_uuid(),'Mesa','counter','[{"product_id":"x-tudo","quantity":1,"modifiers":["Ponto: ao ponto","Ponto: mal passado"]}]');raise exception 'conflicting modifier accepted';exception when others then if sqlerrm<>'conflicting_modifiers' then raise;end if;end;
+ begin perform public.create_order(gen_random_uuid(),'Mesa','counter','[{"product_id":"x-tudo","quantity":1,"modifiers":["Ponto: ao ponto","Ponto: mal passado"]}]');raise exception 'conflicting modifier accepted';exception when others then if sqlerrm<>'invalid_modifier' then raise;end if;end;
  begin insert into public.orders(cashier_id,customer,channel,total_cents) values(auth.uid(),'Fraude','counter',1);raise exception 'direct insert allowed';exception when insufficient_privilege then null;end;
 end $$;
 -- Kitchen cannot see any unpaid ticket, or any financial table at any time.
