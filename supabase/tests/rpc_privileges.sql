@@ -2,6 +2,11 @@
 begin;
 do $$begin
   if exists (
+    select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname in ('public','app_private') and c.relkind in ('r','p')
+      and not c.relrowsecurity
+  ) then raise exception 'Application table without row level security';end if;
+  if exists (
     select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prokind='f'
       and has_function_privilege('anon',p.oid,'execute')

@@ -2734,6 +2734,30 @@ begin
 end $$;
 notify pgrst, 'reload schema';
 
+-- SOURCE: supabase/migrations/20261111163759_private_tables_rls.sql
+-- SHA256: 2f1dec2dd81f01ed416c34af346538f1df1fd745ab604e14d03513e4f2051d67
+-- Internal tables are accessed through their existing privileged functions.
+-- RLS adds a default deny layer if application-role grants change later.
+alter table app_private.admin_cost_coverage enable row level security;
+alter table app_private.integration_settings enable row level security;
+alter table app_private.manual_bank_references enable row level security;
+alter table app_private.message_replies enable row level security;
+alter table app_private.online_ai_permissions enable row level security;
+alter table app_private.online_allocations enable row level security;
+alter table app_private.online_change_votes enable row level security;
+alter table app_private.online_contacts enable row level security;
+alter table app_private.online_handoffs enable row level security;
+alter table app_private.online_payment_events enable row level security;
+alter table app_private.online_rate_limits enable row level security;
+alter table app_private.order_link_secrets enable row level security;
+alter table app_private.order_tracking enable row level security;
+alter table app_private.payment_artifacts enable row level security;
+alter table app_private.pin_credentials enable row level security;
+alter table app_private.terminal_attempts enable row level security;
+alter table app_private.terminal_leases enable row level security;
+alter table app_private.terminal_secrets enable row level security;
+alter table app_private.webhook_events enable row level security;
+
 -- SOURCE: supabase/seed.sql
 -- SHA256: 4dd8ba86b7a1cc34aaa4a0c21d3d362d4c30cf712a471c733d7c9213a800f2e6
 do $$begin perform set_config('app.audit_reason','Carga inicial do cardápio da loja',true);end $$;
