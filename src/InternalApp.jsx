@@ -34,6 +34,7 @@ import PDV from "./pdv/PDV";
 import KDS from "./kds/KDS";
 import TerminalLock from "./auth/TerminalLock";
 import Login from "./auth/Login";
+import AdminMfa from "./auth/AdminMfa";
 import Brand from "./components/Brand";
 import { homeForRole } from "./auth/permissions";
 import { accessModules } from "./auth/modules";
@@ -288,6 +289,7 @@ function AdminModule({ kind }) {
     auditoria: Audit,
     links: OrderLinks,
     integracoes: Integrations,
+    seguranca: AdminMfa,
   };
   const View = views[kind];
   return (
