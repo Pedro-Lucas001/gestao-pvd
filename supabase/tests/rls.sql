@@ -29,6 +29,22 @@ select public.set_staff_pin('00000000-0000-0000-0000-000000000004','1010');
 select public.set_staff_pin('00000000-0000-0000-0000-000000000005','2020');
 select public.set_staff_pin('00000000-0000-0000-0000-000000000002','1234');
 select public.set_staff_pin('00000000-0000-0000-0000-000000000003','5678');
+-- A retained terminal lease cannot authorize an inactive account.
+reset role;
+insert into app_private.terminal_leases(user_id,session_id,expires_at,terminal_id)
+select '00000000-0000-0000-0000-000000000006','inactive-session',
+  now()+interval '10 minutes',terminal_id
+from app_private.terminal_secrets
+where token_hash=encode(extensions.digest(current_setting('test.device'),'sha256'),'hex');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000006","session_id":"inactive-session"}',true);
+select pg_temp.assert(app_private.terminal_open(),'inactive session fixture retains a terminal lease');
+select pg_temp.assert(app_private.can_operate() is false,'inactive operator is denied with a retained lease');
+do $$begin
+ begin perform public.open_shift(0);raise exception 'inactive account opened a shift';exception when insufficient_privilege then null;end;
+ begin perform public.create_order(gen_random_uuid(),'Teste','counter','[{"product_id":"x-tudo","quantity":1}]');raise exception 'inactive account created an order';exception when insufficient_privilege then null;end;
+end $$;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","session_id":"admin-session"}',true);
 do $$begin
  begin perform public.manage_staff('00000000-0000-0000-0000-000000000001','cashier',null,true,'Teste de proteção do último administrador');raise exception 'last admin must survive';exception when others then if sqlerrm<>'last_admin' then raise;end if;end;
 end $$;
