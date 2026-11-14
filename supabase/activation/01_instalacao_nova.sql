@@ -2758,6 +2758,17 @@ alter table app_private.terminal_leases enable row level security;
 alter table app_private.terminal_secrets enable row level security;
 alter table app_private.webhook_events enable row level security;
 
+-- SOURCE: supabase/migrations/20261114171250_deny_inactive_operators.sql
+-- SHA256: 917d4197b8087890a0e09985523c4271f10dddba294cbca4d84eaaca12c934ce
+create or replace function app_private.can_operate()
+returns boolean
+language sql stable security definer
+set search_path=''
+as $$
+  select app_private.is_admin()
+    or (coalesce(app_private.role()='cashier', false) and app_private.terminal_open())
+$$;
+
 -- SOURCE: supabase/seed.sql
 -- SHA256: 4dd8ba86b7a1cc34aaa4a0c21d3d362d4c30cf712a471c733d7c9213a800f2e6
 do $$begin perform set_config('app.audit_reason','Carga inicial do cardápio da loja',true);end $$;
