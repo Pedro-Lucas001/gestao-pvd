@@ -1075,6 +1075,35 @@ nav a:hover {
   justify-content: space-between;
   margin-top: 10px;
 }
+.admin-mfa {
+  max-width: 560px;
+}
+.admin-mfa form,
+.admin-mfa-setup,
+.admin-mfa-policy {
+  display: grid;
+  gap: 12px;
+  margin-block: 16px;
+}
+.admin-mfa-setup svg {
+  background: white;
+  padding: 10px;
+  box-sizing: content-box;
+}
+.admin-mfa-setup code {
+  display: block;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.admin-mfa-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.admin-mfa-confirm input {
+  width: auto;
+  margin-top: 4px;
+}
 .secure-note {
   display: flex;
   align-items: flex-start;

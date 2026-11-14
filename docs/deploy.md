@@ -6,7 +6,13 @@ Use [activation.md](activation.md) para a sequência completa. Esta entrega vers
 
 Crie projetos Supabase separados e destinos/variáveis Vercel isolados. Nunca aponte previews para o banco de produção. No frontend: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_APP_ENV`, opcional `VITE_SENTRY_DSN`. Estes são valores públicos incorporados no bundle. Chaves de serviço, Pix, tokens Meta, senha, PIN e worker secret ficam exclusivamente nos segredos Supabase.
 
-Mantenha signup público desativado, senhas fortes e acesso à plataforma restrito. MFA administrativo da aplicação ainda exige o fluxo de desafio AAL2; ativá-lo no Auth sem implementar a tela/desafio não substitui essa etapa. O administrador entra com e-mail/senha. Funcionários podem usar e-mail/senha ou PIN via Fast-Pass em terminal cadastrado; o papel é verificado no servidor. Configure MFA nas contas de administração da plataforma e homologue o que for adotado para a loja.
+Mantenha o cadastro público desativado, senhas fortes e acesso à plataforma restrito. Configure MFA também nas contas que gerenciam GitHub, Vercel e Supabase. Funcionários podem usar e-mail/senha ou PIN via Fast-Pass em terminal cadastrado.
+
+### Segundo fator da administração
+
+Aplique a migração `20261114172354_admin_mfa.sql` e publique o frontend que tem a tela **Segurança da conta**. Faça o primeiro cadastro somente após verificar que o frontend atualizado está disponível. Depois de confirmar um autenticador TOTP, saia e entre novamente para testar o desafio. Cadastre e teste um autenticador de reserva, se disponível. A ativação para toda a administração fica em **Segurança da conta → Exigir segundo fator**. A operação exige uma sessão AAL2 válida e gera registro na auditoria. Administradores ainda sem autenticador cadastram um durante o login após a exigência.
+
+Se perder o autenticador principal, selecione o de reserva no desafio. Se perder todos os fatores, um responsável com acesso administrativo ao projeto Supabase deve validar a identidade do operador, revogar as sessões da conta e remover seus fatores perdidos pelos controles de administração do Auth. Com a exigência ativa, o próximo login pede um novo cadastro. Teste essa recuperação em um projeto separado.
 
 ## Banco
 

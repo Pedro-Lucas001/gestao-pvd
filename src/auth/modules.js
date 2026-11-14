@@ -75,6 +75,12 @@ export const accessModules = [
     icon: "team",
     roles: ["admin"],
   },
+  {
+    path: "/seguranca",
+    label: "Segurança da conta",
+    icon: "security",
+    roles: ["admin"],
+  },
 ];
 
 export const roleDescriptions = [

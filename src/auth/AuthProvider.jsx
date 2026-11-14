@@ -17,6 +17,7 @@ async function operatorProfile(userId) {
 export default function AuthProvider({ children }) {
   const [session, setSession] = useState(null),
     [profile, setProfile] = useState(null),
+    [mfaPending, setMfaPending] = useState(false),
     [loading, setLoading] = useState(Boolean(supabase)),
     [authError, setAuthError] = useState(""),
     [lease, setLease] = useState(0),
@@ -34,6 +35,7 @@ export default function AuthProvider({ children }) {
     profileReady.current = false;
     setSession(s);
     setProfile(null);
+    setMfaPending(false);
     setLease(0);
     let shouldLock = false;
     if (s) {
@@ -72,13 +74,15 @@ export default function AuthProvider({ children }) {
       setAuthError(
         "Acesso administrativo exige uma nova entrada com e-mail e senha.",
       );
+    } else if (data.requires_mfa) {
+      setMfaPending(true);
     } else {
       setProfile(data);
       profileReady.current = true;
       currentRole.current = data.role;
     }
     setLoading(false);
-    return error || !data?.active || data.requires_password ? null : data;
+    return error || !data?.active || data.requires_password || data.requires_mfa ? null : data;
   }, []);
   useEffect(() => {
     if (!supabase) return;
@@ -89,7 +93,8 @@ export default function AuthProvider({ children }) {
       // Schedule DB access outside the auth callback, avoiding an auth lock deadlock.
       if (!active || explicitSignIn.current) return;
       if (
-        event === "TOKEN_REFRESHED" ||
+        (event === "TOKEN_REFRESHED" && currentRole.current !== "admin" &&
+          profileReady.current) ||
         (event === "SIGNED_IN" &&
           s?.user.id === currentUser.current &&
           profileReady.current)
@@ -119,13 +124,21 @@ export default function AuthProvider({ children }) {
       if (error || !data?.active || data.requires_password) {
         profileReady.current = false;
         setProfile(null);
+        setMfaPending(false);
         setLease(0);
         setAuthError("Seu perfil não pôde ser verificado. Entre novamente.");
+      } else if (data.requires_mfa) {
+        profileReady.current = false;
+        setProfile(null);
+        setMfaPending(true);
+        setLease(0);
+        setAuthError("");
       } else {
         if (currentRole.current !== data.role) setLease(0);
         currentRole.current = data.role;
         profileReady.current = true;
         setProfile(data);
+        setMfaPending(false);
         setAuthError("");
       }
     }, 30000);
@@ -277,6 +290,18 @@ export default function AuthProvider({ children }) {
       explicitSignIn.current = false;
     }
   }
+  async function verifyAdminMfa(factorId, code) {
+    explicitSignIn.current = true;
+    try {
+      const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+      if (error) throw error;
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !data.session) throw new Error("MFA_SESSION_UNAVAILABLE");
+      await loadProfile(data.session, true);
+    } finally {
+      explicitSignIn.current = false;
+    }
+  }
   async function signOut() {
     setLease(0);
     if (profile) {
@@ -300,6 +325,8 @@ export default function AuthProvider({ children }) {
         profile,
         loading,
         authError,
+        mfaPending,
+        verifyAdminMfa,
         locked,
         unlock,
         lock,

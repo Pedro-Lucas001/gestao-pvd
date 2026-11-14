@@ -8,6 +8,7 @@ import { deviceToken } from "./device";
 import Brand from "../components/Brand";
 import PinPad from "./PinPad";
 import { configured } from "../lib/supabaseConfig";
+import AdminMfa from "./AdminMfa";
 export default function Login() {
   const {
     profile,
@@ -18,6 +19,7 @@ export default function Login() {
     signOut,
     signIn,
     signInWithPin,
+    mfaPending,
   } = useAuth();
   const online = useConnection();
   const [mode, setMode] = useState("admin"),
@@ -70,7 +72,12 @@ export default function Login() {
         />
         <small>Carpina · PE · Feito com amor</small>
       </section>
-      <section className="auth-form">
+      {mfaPending && (
+        <section className="auth-form">
+          <AdminMfa key={session?.user.id} required />
+        </section>
+      )}
+      <section className="auth-form" hidden={mfaPending}>
         <Link className="text-button" to="/cardapio">
           ← Voltar ao cardápio
         </Link>

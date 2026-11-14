@@ -6,6 +6,8 @@ create role service_role nologin bypassrls;
 create schema auth;
 create schema extensions;
 create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}');
+create table auth.mfa_factors(id uuid primary key, user_id uuid references auth.users(id) not null, status text not null, factor_type text not null);
+create table auth.sessions(id uuid primary key, user_id uuid references auth.users(id) not null, aal text, not_after timestamptz, factor_id uuid);
 create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
 create function auth.uid() returns uuid language sql stable as $$ select (auth.jwt()->>'sub')::uuid $$;
 grant usage on schema auth to authenticated,anon,service_role;
