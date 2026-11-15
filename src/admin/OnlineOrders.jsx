@@ -5,6 +5,7 @@ import { useAuth } from "../auth/context";
 import { cents, money } from "../lib/operations";
 import "./OnlineOrders.css";
 import PrinterSetup from "./PrinterSetup";
+import DeliveryRules from "./DeliveryRules";
 const labels = {
   payment_pending: "Pagamento pendente",
   awaiting_store: "Aguardando aceite da loja",
@@ -58,9 +59,9 @@ function Settings({ refresh }) {
     <details className="online-settings">
       <summary>Configurar pedidos, entrega e contato da loja</summary>
       <p>
-        Taxa única de entrega. Ative apenas quando a equipe puder atender os
-        endereços recebidos. Cadastre Pix, Mercado Pago, Meta e OpenAI como
-        segredos das funções, fora do navegador.
+        A taxa fixa vale quando a entrega por bairro está desativada. Cadastre
+        Pix, Mercado Pago, Meta e OpenAI como segredos das funções, fora do
+        navegador.
       </p>
       {settings && (
         <form onSubmit={save} key={JSON.stringify(settings)}>
@@ -520,6 +521,7 @@ export default function OnlineOrders() {
         </button>
       </div>
       {admin && <Settings refresh={refresh} />}
+      {admin && <DeliveryRules />}
       {admin && <PrinterSetup />}
       {metrics && (
         <>

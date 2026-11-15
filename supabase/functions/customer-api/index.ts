@@ -9,6 +9,11 @@ import {
 const messages: Record<string, string> = {
   invalid_contact: "Confira seu nome e WhatsApp com DDD.",
   payment_unavailable: "Forma de pagamento indisponível.",
+  outside_order_hours: "A loja está fora do horário de pedidos online.",
+  delivery_area_required:
+    "Selecione um bairro atendido para calcular a entrega.",
+  delivery_area_unavailable:
+    "Esse bairro ficou indisponível. Selecione outro ou escolha retirada.",
   shop_closed: "Os pedidos online estão pausados.",
   delivery_unavailable: "Entrega indisponível. Selecione retirada.",
   price_changed_review_order: "Os valores mudaram. Confira o resumo novamente.",
@@ -86,6 +91,10 @@ Deno.serve(async (req: Request) => {
               p_items: body.items,
               p_fulfillment: body.fulfillment,
               p_method: body.method || "pix",
+              ...(typeof body.delivery_area_id === "string" &&
+              body.delivery_area_id
+                ? { p_area: body.delivery_area_id }
+                : {}),
             }),
       );
     if (body.action === "create") {

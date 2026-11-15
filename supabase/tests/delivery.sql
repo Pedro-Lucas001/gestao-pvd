@@ -81,6 +81,62 @@ select public.online_retry_print((current_setting('test.lost_job')::jsonb->>'id'
 select pg_temp.assert(position(current_setting('test.print_token') in public.online_print_monitor()::text)=0,'monitor nao revela credencial');
 reset role;
 select pg_temp.assert((select payload->>'reprint'='true' and status='pending' from app_private.online_print_jobs where id=(current_setting('test.lost_job')::jsonb->>'id')::uuid),'segunda via exige acao explicita e e identificada');
+-- Weekly windows are evaluated in Recife, including an opening across midnight.
+select pg_temp.assert(
+ not app_private.within_online_hours('[null,{"opens":"18:00","closes":"01:00"},null,null,null,null,null]', '2026-11-17 20:59:59+00')
+ and app_private.within_online_hours('[null,{"opens":"18:00","closes":"01:00"},null,null,null,null,null]', '2026-11-17 21:00:00+00')
+ and app_private.within_online_hours('[null,{"opens":"18:00","closes":"01:00"},null,null,null,null,null]', '2026-11-18 03:59:59+00')
+ and not app_private.within_online_hours('[null,{"opens":"18:00","closes":"01:00"},null,null,null,null,null]', '2026-11-18 04:00:00+00'),
+ 'abertura inclusiva e fechamento exclusivo mesmo virando o dia');
+select set_config('test.closed_week','[null,null,null,null,null,null,null]',true);
+select set_config('test.areas','[{"id":"e5000000-0000-0000-0000-000000000001","name":"  Bairro   Teste  ","fee_cents":350}]',true);
+select set_config('test.area_contact',(current_setting('test.delivery_contact')::jsonb
+  || '{"delivery_area_id":"e5000000-0000-0000-0000-000000000001"}')::text,true);
+select pg_temp.assert(not has_function_privilege('anon','public.online_save_delivery_rules(boolean,jsonb,boolean,jsonb,text)','execute')
+ and not has_function_privilege('authenticated','public.online_delivery_quote(jsonb,text,text,text)','execute'),
+ 'acesso às regras e à cotação segue os papéis');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e0000000-0000-0000-0000-000000000002","session_id":"delivery-test","aal":"aal2"}',true);
+do $$begin
+ begin perform public.online_save_delivery_rules(false,current_setting('test.closed_week')::jsonb,true,current_setting('test.areas')::jsonb,'Teste de autorização');raise exception 'ASSERT: caixa editou regras';exception when insufficient_privilege then null;end;
+end $$;
+select set_config('request.jwt.claims','{"sub":"e0000000-0000-0000-0000-000000000001","session_id":"delivery-test","aal":"aal2"}',true);
+do $$begin
+ begin perform public.online_save_delivery_rules(true,'[null]',false,'[]','Dia inválido');raise exception 'ASSERT: aceitou semana inválida';exception when raise_exception then if sqlerrm<>'invalid_online_hours' then raise;end if;end;
+ begin perform public.online_save_delivery_rules(false,current_setting('test.closed_week')::jsonb,true,'[]','Teste sem bairro');raise exception 'ASSERT: ativou bairros vazios';exception when raise_exception then if sqlerrm<>'delivery_areas_empty' then raise;end if;end;
+ begin perform public.online_save_delivery_rules(false,current_setting('test.closed_week')::jsonb,true,current_setting('test.areas')::jsonb||current_setting('test.areas')::jsonb,'Bairro duplicado');raise exception 'ASSERT: aceitou duplicata';exception when raise_exception then if sqlerrm<>'duplicate_delivery_area' then raise;end if;end;
+end $$;
+select public.online_save_delivery_rules(false,current_setting('test.closed_week')::jsonb,true,current_setting('test.areas')::jsonb,'Configurar bairro de teste');
+set local role service_role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+select pg_temp.assert((public.online_delivery_quote(current_setting('test.delivery_items')::jsonb,'delivery','card_delivery','e5000000-0000-0000-0000-000000000001')->>'total_cents')::int=1431,
+ 'cartão na entrega aplica 6% ao subtotal mais taxa do bairro');
+select pg_temp.assert((public.online_delivery_quote(current_setting('test.delivery_items')::jsonb,'pickup','cash')->>'total_cents')::int=1000,
+ 'retirada dispensa bairro e taxa de entrega');
+do $$begin
+ begin perform public.online_delivery_quote(current_setting('test.delivery_items')::jsonb,'delivery','cash');raise exception 'ASSERT: cotou sem bairro';exception when raise_exception then if sqlerrm<>'delivery_area_required' then raise;end if;end;
+ begin perform public.online_delivery_quote(current_setting('test.delivery_items')::jsonb,'delivery','cash','desconhecido');raise exception 'ASSERT: cotou bairro desconhecido';exception when raise_exception then if sqlerrm<>'delivery_area_unavailable' then raise;end if;end;
+ begin perform public.online_create_order(gen_random_uuid(),repeat('a',64),current_setting('test.delivery_items')::jsonb,current_setting('test.delivery_contact')::jsonb,'delivery','cash',null,1100);raise exception 'ASSERT: pedido direto sem bairro';exception when raise_exception then if sqlerrm<>'delivery_area_required' then raise;end if;end;
+ begin perform public.online_create_order(gen_random_uuid(),repeat('a',64),current_setting('test.delivery_items')::jsonb,current_setting('test.area_contact')::jsonb,'delivery','cash',null,1100);raise exception 'ASSERT: aceitou taxa antiga';exception when raise_exception then if sqlerrm<>'price_changed_review_order' then raise;end if;end;
+end $$;
+select set_config('test.area_order',(public.online_create_order('e3000000-0000-0000-0000-000000000003',repeat('a',64),current_setting('test.delivery_items')::jsonb,current_setting('test.area_contact')::jsonb,'delivery','cash',null,1350)->>'id'),true);
+reset role;
+select pg_temp.assert((select payload#>>'{contact,address}' like '% · Bairro: Bairro Teste'
+ from app_private.online_print_jobs where order_id=current_setting('test.area_order')::uuid),'cupom preserva o bairro canônico');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e0000000-0000-0000-0000-000000000001","session_id":"delivery-test","aal":"aal2"}',true);
+select public.online_save_delivery_rules(true,current_setting('test.closed_week')::jsonb,false,'[]','Pausar novos pedidos com agenda');
+set local role service_role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+select pg_temp.assert(public.online_shop_config()->>'accepting_orders'='false','configuração pública informa fechamento');
+do $$begin
+ begin perform public.online_delivery_quote(current_setting('test.delivery_items')::jsonb,'pickup','cash');raise exception 'ASSERT: cotou fora do horário';exception when raise_exception then if sqlerrm<>'outside_order_hours' then raise;end if;end;
+ begin perform public.online_create_order(gen_random_uuid(),repeat('b',64),current_setting('test.delivery_items')::jsonb,current_setting('test.area_contact')::jsonb,'delivery','cash',null,1350);raise exception 'ASSERT: aceitou novo pedido fora do horário';exception when raise_exception then if sqlerrm<>'outside_order_hours' then raise;end if;end;
+end $$;
+select pg_temp.assert(public.online_create_order('e3000000-0000-0000-0000-000000000003',repeat('a',64),current_setting('test.delivery_items')::jsonb,current_setting('test.area_contact')::jsonb,'delivery','cash',null,1350)->>'id'=current_setting('test.area_order'),
+ 'repetição recupera pedido mesmo após fechar e remover bairro');
+select pg_temp.assert(public.online_change_quote(repeat('a',64),current_setting('test.delivery_items')::jsonb)->>'total_cents'='1350',
+ 'alteração de pedido mantém a taxa original depois do fechamento');
 rollback;
 \o
 \echo 'Delivery checkout, accounting, tracking and printer queue tests passed.'
