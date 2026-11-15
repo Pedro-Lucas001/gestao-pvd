@@ -543,7 +543,8 @@ export default function CustomerOrder() {
   const tracking = hash.get("acompanhar") || "";
   const [shop, setShop] = useState(null),
     [catalog, setCatalog] = useState([]),
-    [configError, setConfigError] = useState("");
+    [configError, setConfigError] = useState(""),
+    [refreshConfig, setRefreshConfig] = useState(0);
   const [fulfillment, setFulfillment] = useState(
       () => pendingRequest()?.fulfillment || "pickup",
     ),
@@ -564,45 +565,52 @@ export default function CustomerOrder() {
         email: "",
         address: "",
         reference: "",
+        delivery_area_id: "",
         whatsapp_consent: false,
       },
   );
-  const [quote, setQuote] = useState(null),
+  const [quoteResult, setQuoteResult] = useState(null),
+    [quoteError, setQuoteError] = useState(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [submission, setSubmission] = useState(pendingRequest),
     [knownRejected, setKnownRejected] = useState(false);
   const suggestionApplied = useRef(false);
+  const initialConfig = useRef(true);
   useEffect(() => {
     document.title = "Planeta Lanches · Seu pedido";
   }, []);
   useEffect(() => {
     const c = new AbortController();
-    const timer = setTimeout(
-      () =>
-        customerApi("config", {}, c.signal)
-          .then((value) => {
-            setShop(value);
-            setCatalog(value.catalog || []);
-            if (!pendingRequest() && !value.payments.pix && value.payments.card)
-              setMethod("card");
-            else if (
-              !pendingRequest() &&
-              !value.payments.pix &&
-              value.cash_enabled
-            )
-              setMethod("cash");
-          })
-          .catch((e) => {
-            if (!c.signal.aborted) setConfigError(e.message);
-          }),
-      0,
-    );
+    let running = false;
+    async function load() {
+      if (running) return;
+      running = true;
+      try {
+        const value = await customerApi("config", {}, c.signal);
+        if (c.signal.aborted) return;
+        setShop(value);
+        setCatalog(value.catalog || []);
+        setConfigError("");
+        if (initialConfig.current && !pendingRequest() && !value.payments.pix) {
+          if (value.payments.card) setMethod("card");
+          else if (value.cash_enabled) setMethod("cash");
+        }
+        initialConfig.current = false;
+      } catch (e) {
+        if (!c.signal.aborted) setConfigError(e.message);
+      } finally {
+        running = false;
+      }
+    }
+    const timer = setTimeout(load, 0);
+    const interval = setInterval(load, 30000);
     return () => {
       c.abort();
       clearTimeout(timer);
+      clearInterval(interval);
     };
-  }, []);
+  }, [refreshConfig]);
   useEffect(() => {
     const suggestion = new URLSearchParams(locationState.hash.slice(1)).get(
       "sugestao",
@@ -642,31 +650,68 @@ export default function CustomerOrder() {
     }, 0);
     return () => clearTimeout(timer);
   }, [catalog, locationState.hash, setItems, navigate]);
+  const acceptingOrders = shop?.accepting_orders ?? shop?.enabled;
+  const restrictedDelivery =
+    fulfillment === "delivery" && shop?.delivery_areas_enabled;
+  const area = restrictedDelivery
+    ? shop.delivery_areas.find(({ id }) => id === contact.delivery_area_id)
+    : null;
+  const areaId = area?.id ?? "";
+  const readyToQuote = Boolean(
+    items.length &&
+      acceptingOrders &&
+      !tracking &&
+      !submission &&
+      (fulfillment === "pickup" ||
+        (shop.delivery_enabled && (!restrictedDelivery || area))),
+  );
+  const expectedFee =
+    fulfillment === "delivery"
+      ? (area?.fee_cents ?? shop?.delivery_fee_cents)
+      : 0;
   const loadQuote = useCallback(
     (signal) =>
       customerApi(
         "quote",
-        { items: cartPayload(items), fulfillment, method },
+        {
+          items: cartPayload(items),
+          fulfillment,
+          method,
+          delivery_area_id: areaId,
+        },
         signal,
       ),
-    [items, fulfillment, method],
+    [items, fulfillment, method, areaId],
   );
   useEffect(() => {
-    if (!items.length || !shop || tracking) return;
+    if (!readyToQuote) return;
     const c = new AbortController();
+    const context = { loadQuote, expectedFee, refreshConfig };
     const timer = setTimeout(() => {
-      setQuote(null);
       loadQuote(c.signal)
-        .then((q) => setQuote({ ...q, payment_method: method, fulfillment }))
+        .then((value) => {
+          if (c.signal.aborted) return;
+          setQuoteError(null);
+          setQuoteResult({ ...context, value });
+        })
         .catch((e) => {
-          if (!c.signal.aborted) setError(e.message);
+          if (!c.signal.aborted)
+            setQuoteError({ ...context, message: e.message });
         });
     }, 250);
     return () => {
       c.abort();
       clearTimeout(timer);
     };
-  }, [items.length, shop, tracking, loadQuote, method, fulfillment]);
+  }, [readyToQuote, loadQuote, expectedFee, refreshConfig]);
+  const isCurrentQuote = (result) =>
+    readyToQuote &&
+    result?.loadQuote === loadQuote &&
+    result.expectedFee === expectedFee &&
+    result.refreshConfig === refreshConfig;
+  const quote = isCurrentQuote(quoteResult) ? quoteResult.value : null;
+  const checkoutError =
+    error || (isCurrentQuote(quoteError) ? quoteError.message : "");
   function field(name, value) {
     setContact((p) => ({ ...p, [name]: value }));
   }
@@ -676,16 +721,15 @@ export default function CustomerOrder() {
     let request = submission;
     try {
       if (!request) {
-        if (
-          quote.payment_method !== method ||
-          quote.fulfillment !== fulfillment
-        )
-          throw new Error("quote_stale");
         request = {
           key: operationKey(),
           tracking: trackingToken(),
           items: cartPayload(items),
-          contact: { ...contact, phone: phoneNumber(contact.phone) },
+          contact: {
+            ...contact,
+            phone: phoneNumber(contact.phone),
+            delivery_area_id: areaId,
+          },
           fulfillment,
           method,
           change_for_cents:
@@ -743,6 +787,9 @@ export default function CustomerOrder() {
           "addon_unavailable",
           "addon_requires_sandwich",
           "delivery_unavailable",
+          "delivery_area_required",
+          "delivery_area_unavailable",
+          "outside_order_hours",
           "shop_closed",
         ].includes(e.code),
       );
@@ -779,6 +826,42 @@ export default function CustomerOrder() {
             <p role="alert" className="customer-error">
               {configError}
             </p>
+          )}
+          {shop && !acceptingOrders && (
+            <section className="customer-panel" role="status">
+              <h2>
+                {shop.enabled
+                  ? "Fora do horário de pedidos"
+                  : "Pedidos online pausados"}
+              </h2>
+              {shop.enabled && shop.schedule_enabled && (
+                <details>
+                  <summary>Ver horários em Recife</summary>
+                  <ul>
+                    {[
+                      "Segunda",
+                      "Terça",
+                      "Quarta",
+                      "Quinta",
+                      "Sexta",
+                      "Sábado",
+                      "Domingo",
+                    ].map((day, index) => {
+                      const hours = shop.weekly_hours[index];
+                      return (
+                        <li key={day}>
+                          {day}
+                          {" · "}
+                          {hours
+                            ? `${hours.opens}–${hours.closes}${hours.closes < hours.opens ? " do dia seguinte" : ""}`
+                            : "Fechado"}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              )}
+            </section>
           )}
           {!shownItems.length ? (
             <section className="customer-panel customer-empty-cart">
@@ -857,7 +940,9 @@ export default function CustomerOrder() {
                       Entrega
                       <small>
                         {shop?.delivery_enabled
-                          ? `Taxa: ${money(shop.delivery_fee_cents)}`
+                          ? shop.delivery_areas_enabled
+                            ? "Confira o bairro e a taxa de entrega."
+                            : `Taxa: ${money(shop.delivery_fee_cents)}`
                           : "Entrega indisponível no momento."}
                       </small>
                     </span>
@@ -901,13 +986,42 @@ export default function CustomerOrder() {
                   </label>
                   {fulfillment === "delivery" && (
                     <>
+                      {restrictedDelivery && (
+                        <label>
+                          Bairro atendido
+                          <select
+                            required
+                            value={areaId}
+                            onChange={(e) =>
+                              field("delivery_area_id", e.target.value)
+                            }
+                          >
+                            <option value="">Selecione o bairro</option>
+                            {shop.delivery_areas.map(
+                              ({ id, name, fee_cents }) => (
+                                <option key={id} value={id}>
+                                  {name} · {money(fee_cents)}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                          <small>
+                            Se o seu bairro não estiver na lista, escolha
+                            retirada.
+                          </small>
+                        </label>
+                      )}
                       <label>
                         Endereço completo para entrega
                         <textarea
                           required
                           minLength={10}
                           maxLength={500}
-                          placeholder="Rua, número, complemento, bairro e cidade."
+                          placeholder={
+                            restrictedDelivery
+                              ? "Rua, número, complemento e cidade."
+                              : "Rua, número, complemento, bairro e cidade."
+                          }
                           value={contact.address}
                           onChange={(e) => field("address", e.target.value)}
                         />
@@ -1019,9 +1133,7 @@ export default function CustomerOrder() {
                 <div className="customer-summary" aria-live="polite">
                   <span>
                     Produtos
-                    <strong>
-                      {quote ? money(quote.subtotal_cents) : "Atualizando…"}
-                    </strong>
+                    <strong>{quote ? money(quote.subtotal_cents) : "—"}</strong>
                   </span>
                   <span>
                     Entrega
@@ -1052,9 +1164,9 @@ export default function CustomerOrder() {
                     </strong>
                   </span>
                 </div>
-                {error && (
+                {checkoutError && (
                   <p role="alert" className="customer-error">
-                    {error}
+                    {checkoutError}
                   </p>
                 )}
                 {knownRejected && (
@@ -1065,6 +1177,8 @@ export default function CustomerOrder() {
                       forgetPending();
                       setSubmission(null);
                       setKnownRejected(false);
+                      setError("");
+                      setRefreshConfig((current) => current + 1);
                     }}
                   >
                     Corrigir dados do pedido
@@ -1075,11 +1189,7 @@ export default function CustomerOrder() {
                   disabled={
                     busy ||
                     !configured ||
-                    !shop?.enabled ||
-                    ((!quote ||
-                      quote.payment_method !== method ||
-                      quote.fulfillment !== fulfillment) &&
-                      !submission) ||
+                    (!quote && !submission) ||
                     !shownItems.length
                   }
                 >
